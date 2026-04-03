@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { LESSONS, LessonData } from '../data/lessons';
+import { db, auth } from '../firebase';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  getDocs, 
+  query, 
+  where,
+  updateDoc,
+  getDoc
+} from 'firebase/firestore';
 
 interface CustomNote {
   id: string;
@@ -46,22 +59,24 @@ interface AppState {
   userStats: Record<string, Record<string, VocabularyStats>>; // Key 1: username, Key 2: word
   customLessons: LessonData[];
   lastSaved: number;
+  initialized: boolean;
   setUserType: (type: 'student' | 'teacher' | null) => void;
   setCurrentUser: (username: string | null) => void;
-  addStudent: (student: StudentAccount) => void;
-  deleteStudent: (username: string) => void;
-  updateStudentActivity: (username: string, activity: Partial<StudentActivity>) => void;
-  completeActivity: (lessonId: number, activity: keyof LessonProgress['stars']) => void;
+  addStudent: (student: StudentAccount) => Promise<void>;
+  deleteStudent: (username: string) => Promise<void>;
+  updateStudentActivity: (username: string, activity: Partial<StudentActivity>) => Promise<void>;
+  completeActivity: (lessonId: number, activity: keyof LessonProgress['stars']) => Promise<void>;
   isLessonUnlocked: (lessonId: number) => boolean;
   getStarsCount: (lessonId: number, username?: string) => number;
-  addNote: (word: string, note: Omit<CustomNote, 'id'>) => void;
-  deleteNote: (word: string, noteId: string) => void;
-  updateNote: (word: string, noteId: string, updates: Partial<CustomNote>) => void;
-  updateUserNote: (username: string, word: string, noteId: string, updates: Partial<CustomNote>) => void;
-  updateVocabStats: (word: string, updates: Partial<VocabularyStats>) => void;
-  incrementViewCount: (word: string) => void;
-  updateLesson: (lessonId: number, updates: Partial<LessonData>) => void;
+  addNote: (word: string, note: Omit<CustomNote, 'id'>) => Promise<void>;
+  deleteNote: (word: string, noteId: string) => Promise<void>;
+  updateNote: (word: string, noteId: string, updates: Partial<CustomNote>) => Promise<void>;
+  updateUserNote: (username: string, word: string, noteId: string, updates: Partial<CustomNote>) => Promise<void>;
+  updateVocabStats: (word: string, updates: Partial<VocabularyStats>) => Promise<void>;
+  incrementViewCount: (word: string) => Promise<void>;
+  updateLesson: (lessonId: number, updates: Partial<LessonData>) => Promise<void>;
   saveProgress: () => void;
+  initFirestore: () => () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -76,75 +91,151 @@ export const useAppStore = create<AppState>()(
       userStats: {},
       customLessons: LESSONS,
       lastSaved: Date.now(),
+      initialized: false,
       setUserType: (userType) => set({ userType }),
       setCurrentUser: (currentUser) => set({ currentUser }),
-      addStudent: (student) => set((state) => ({
-        studentAccounts: [...state.studentAccounts, student]
-      })),
-      deleteStudent: (username) => set((state) => ({
-        studentAccounts: state.studentAccounts.filter(s => s.username !== username),
-        studentActivity: { ...state.studentActivity, [username]: undefined },
-        userProgress: { ...state.userProgress, [username]: undefined },
-        userNotes: { ...state.userNotes, [username]: undefined },
-        userStats: { ...state.userStats, [username]: undefined }
-      })),
-      updateStudentActivity: (username, activity) => set((state) => ({
-        studentActivity: {
-          ...state.studentActivity,
-          [username]: {
-            ...(state.studentActivity[username] || { lessonId: 1, wordIndex: 0, lastSaved: Date.now() }),
-            ...activity,
-            lastSaved: Date.now()
+      
+      initFirestore: () => {
+        if (get().initialized) return () => {};
+
+        const unsubscribers: (() => void)[] = [];
+
+        // Sync Student Accounts
+        unsubscribers.push(onSnapshot(collection(db, 'studentAccounts'), (snapshot) => {
+          const accounts: StudentAccount[] = [];
+          snapshot.forEach(doc => accounts.push(doc.data() as StudentAccount));
+          set({ studentAccounts: accounts });
+        }));
+
+        // Sync Lessons
+        unsubscribers.push(onSnapshot(collection(db, 'lessons'), (snapshot) => {
+          if (snapshot.empty) {
+            // If no lessons in Firestore, upload default ones once
+            LESSONS.forEach(l => setDoc(doc(db, 'lessons', l.id.toString()), l));
+          } else {
+            const lessons: LessonData[] = [];
+            snapshot.forEach(doc => lessons.push(doc.data() as LessonData));
+            set({ customLessons: lessons.sort((a, b) => a.id - b.id) });
           }
-        }
-      })),
-      completeActivity: (lessonId, activity) => {
+        }));
+
+        // Sync Student Activity
+        unsubscribers.push(onSnapshot(collection(db, 'studentActivity'), (snapshot) => {
+          const activity: Record<string, StudentActivity> = {};
+          snapshot.forEach(doc => activity[doc.id] = doc.data() as StudentActivity);
+          set({ studentActivity: activity });
+        }));
+
+        // Sync User Progress
+        unsubscribers.push(onSnapshot(collection(db, 'userProgress'), (snapshot) => {
+          // This is a bit more complex because of nested structure
+          // We'll fetch all progress docs
+          snapshot.forEach(async (userDoc) => {
+            const username = userDoc.id;
+            const lessonsSnapshot = await getDocs(collection(db, `userProgress/${username}/lessons`));
+            const progress: Record<number, LessonProgress> = {};
+            lessonsSnapshot.forEach(lDoc => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
+            set(state => ({
+              userProgress: { ...state.userProgress, [username]: progress }
+            }));
+          });
+        }));
+
+        // Sync User Notes
+        unsubscribers.push(onSnapshot(collection(db, 'userNotes'), (snapshot) => {
+          snapshot.forEach(async (userDoc) => {
+            const username = userDoc.id;
+            const notesSnapshot = await getDocs(collection(db, `userNotes/${username}/notes`));
+            const notes: Record<string, CustomNote[]> = {};
+            notesSnapshot.forEach(nDoc => {
+              const note = nDoc.data() as CustomNote & { word: string };
+              if (!notes[note.word]) notes[note.word] = [];
+              notes[note.word].push(note);
+            });
+            set(state => ({
+              userNotes: { ...state.userNotes, [username]: notes }
+            }));
+          });
+        }));
+
+        // Sync User Stats
+        unsubscribers.push(onSnapshot(collection(db, 'userStats'), (snapshot) => {
+          snapshot.forEach(async (userDoc) => {
+            const username = userDoc.id;
+            const statsSnapshot = await getDocs(collection(db, `userStats/${username}/words`));
+            const stats: Record<string, VocabularyStats> = {};
+            statsSnapshot.forEach(sDoc => stats[sDoc.id] = sDoc.data() as VocabularyStats);
+            set(state => ({
+              userStats: { ...state.userStats, [username]: stats }
+            }));
+          });
+        }));
+
+        set({ initialized: true });
+        return () => unsubscribers.forEach(unsub => unsub());
+      },
+
+      addStudent: async (student) => {
+        await setDoc(doc(db, 'studentAccounts', student.username), student);
+      },
+
+      deleteStudent: async (username) => {
+        await deleteDoc(doc(db, 'studentAccounts', username));
+        await deleteDoc(doc(db, 'studentActivity', username));
+        // Note: Deleting subcollections requires more logic, usually done via Cloud Functions or recursive deletes
+        // For now we just delete the main docs
+      },
+
+      updateStudentActivity: async (username, activity) => {
+        const current = get().studentActivity[username] || { lessonId: 1, wordIndex: 0, lastSaved: Date.now() };
+        const updated = { ...current, ...activity, lastSaved: Date.now() };
+        await setDoc(doc(db, 'studentActivity', username), updated);
+      },
+
+      completeActivity: async (lessonId, activity) => {
         const { currentUser } = get();
         if (!currentUser || currentUser === 'teacher') return;
 
-        set((state) => {
-          const currentProgressMap = state.userProgress[currentUser] || {
-            1: {
+        const currentProgressMap = get().userProgress[currentUser] || {
+          1: {
+            stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
+            unlocked: true,
+          }
+        };
+        
+        const currentProgress = currentProgressMap[lessonId] || {
+          stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
+          unlocked: lessonId === 1,
+        };
+
+        const newStars = { ...currentProgress.stars, [activity]: true };
+        const newLessonProgress = { ...currentProgress, stars: newStars };
+        
+        await setDoc(doc(db, `userProgress/${currentUser}/lessons`, lessonId.toString()), newLessonProgress);
+
+        // Check if next lesson should be unlocked
+        const starsCount = Object.values(newStars).filter(Boolean).length;
+        if (starsCount >= 4) {
+          const nextId = lessonId + 1;
+          const nextProgressDoc = await getDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()));
+          if (!nextProgressDoc.exists()) {
+            await setDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), {
               stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
               unlocked: true,
-            }
-          };
-          
-          const currentProgress = currentProgressMap[lessonId] || {
-            stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
-            unlocked: lessonId === 1,
-          };
-
-          const newStars = { ...currentProgress.stars, [activity]: true };
-          const newLessonProgress = { ...currentProgress, stars: newStars };
-          const newUserProgressMap = { ...currentProgressMap, [lessonId]: newLessonProgress };
-
-          // Check if next lesson should be unlocked
-          const starsCount = Object.values(newStars).filter(Boolean).length;
-          if (starsCount >= 4) {
-            const nextId = lessonId + 1;
-            if (!newUserProgressMap[nextId]) {
-              newUserProgressMap[nextId] = {
-                stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
-                unlocked: true,
-              };
-            } else {
-              newUserProgressMap[nextId].unlocked = true;
-            }
+            });
+          } else {
+            await updateDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), { unlocked: true });
           }
-
-          return { 
-            userProgress: { ...state.userProgress, [currentUser]: newUserProgressMap },
-            lastSaved: Date.now() 
-          };
-        });
+        }
       },
+
       isLessonUnlocked: (lessonId) => {
         if (lessonId === 1) return true;
         const { currentUser, userProgress } = get();
-        if (!currentUser || currentUser === 'teacher') return true; // Teacher sees all
+        if (!currentUser || currentUser === 'teacher') return true;
         return userProgress[currentUser]?.[lessonId]?.unlocked || false;
       },
+
       getStarsCount: (lessonId, username) => {
         const { currentUser, userProgress } = get();
         const targetUser = username || currentUser;
@@ -153,142 +244,63 @@ export const useAppStore = create<AppState>()(
         if (!p) return 0;
         return Object.values(p.stars).filter(Boolean).length;
       },
-      addNote: (word, note) => {
+
+      addNote: async (word, note) => {
         const { currentUser } = get();
         if (!currentUser || currentUser === 'teacher') return;
 
-        set((state) => {
-          const userNotesMap = state.userNotes[currentUser] || {};
-          const wordNotes = userNotesMap[word] || [];
-          const newNote = { ...note, id: Math.random().toString(36).substring(7) };
-          
-          return {
-            userNotes: {
-              ...state.userNotes,
-              [currentUser]: {
-                ...userNotesMap,
-                [word]: [...wordNotes, newNote],
-              }
-            },
-            lastSaved: Date.now(),
-          };
-        });
+        const id = Math.random().toString(36).substring(7);
+        const newNote = { ...note, id, word };
+        await setDoc(doc(db, `userNotes/${currentUser}/notes`, id), newNote);
       },
-      deleteNote: (word, noteId) => {
+
+      deleteNote: async (word, noteId) => {
         const { currentUser } = get();
         if (!currentUser || currentUser === 'teacher') return;
-
-        set((state) => {
-          const userNotesMap = state.userNotes[currentUser] || {};
-          const wordNotes = userNotesMap[word] || [];
-          
-          return {
-            userNotes: {
-              ...state.userNotes,
-              [currentUser]: {
-                ...userNotesMap,
-                [word]: wordNotes.filter((n) => n.id !== noteId),
-              }
-            },
-            lastSaved: Date.now(),
-          };
-        });
+        await deleteDoc(doc(db, `userNotes/${currentUser}/notes`, noteId));
       },
-      updateNote: (word, noteId, updates) => {
+
+      updateNote: async (word, noteId, updates) => {
         const { currentUser } = get();
         if (!currentUser || currentUser === 'teacher') return;
+        await updateDoc(doc(db, `userNotes/${currentUser}/notes`, noteId), updates);
+      },
 
-        set((state) => {
-          const userNotesMap = state.userNotes[currentUser] || {};
-          const wordNotes = userNotesMap[word] || [];
-          
-          return {
-            userNotes: {
-              ...state.userNotes,
-              [currentUser]: {
-                ...userNotesMap,
-                [word]: wordNotes.map((n) => (n.id === noteId ? { ...n, ...updates } : n)),
-              }
-            },
-            lastSaved: Date.now(),
-          };
-        });
+      updateUserNote: async (username, word, noteId, updates) => {
+        await updateDoc(doc(db, `userNotes/${username}/notes`, noteId), updates);
       },
-      updateUserNote: (username, word, noteId, updates) => {
-        set((state) => {
-          const userNotesMap = state.userNotes[username] || {};
-          const wordNotes = userNotesMap[word] || [];
-          
-          return {
-            userNotes: {
-              ...state.userNotes,
-              [username]: {
-                ...userNotesMap,
-                [word]: wordNotes.map((n) => (n.id === noteId ? { ...n, ...updates } : n)),
-              }
-            },
-            lastSaved: Date.now(),
-          };
-        });
-      },
-      updateVocabStats: (word, updates) => {
+
+      updateVocabStats: async (word, updates) => {
         const { currentUser } = get();
         if (!currentUser || currentUser === 'teacher') return;
-
-        set((state) => {
-          const userStatsMap = state.userStats[currentUser] || {};
-          const current = userStatsMap[word] || { difficulty: 0, viewCount: 0 };
-          
-          return {
-            userStats: {
-              ...state.userStats,
-              [currentUser]: {
-                ...userStatsMap,
-                [word]: { ...current, ...updates },
-              }
-            },
-            lastSaved: Date.now(),
-          };
-        });
+        const current = get().userStats[currentUser]?.[word] || { difficulty: 0, viewCount: 0 };
+        await setDoc(doc(db, `userStats/${currentUser}/words`, word), { ...current, ...updates });
       },
-      incrementViewCount: (word) => {
+
+      incrementViewCount: async (word) => {
         const { currentUser } = get();
         if (!currentUser || currentUser === 'teacher') return;
+        const current = get().userStats[currentUser]?.[word] || { difficulty: 0, viewCount: 0 };
+        await setDoc(doc(db, `userStats/${currentUser}/words`, word), { ...current, viewCount: current.viewCount + 1 });
+      },
 
-        set((state) => {
-          const userStatsMap = state.userStats[currentUser] || {};
-          const current = userStatsMap[word] || { difficulty: 0, viewCount: 0 };
-          
-          return {
-            userStats: {
-              ...state.userStats,
-              [currentUser]: {
-                ...userStatsMap,
-                [word]: { ...current, viewCount: current.viewCount + 1 },
-              }
-            },
-            lastSaved: Date.now(),
-          };
-        });
+      updateLesson: async (lessonId, updates) => {
+        await updateDoc(doc(db, 'lessons', lessonId.toString()), updates);
       },
-      updateLesson: (lessonId, updates) => {
-        set((state) => ({
-          customLessons: state.customLessons.map((l) =>
-            l.id === lessonId ? { ...l, ...updates } : l
-          ),
-          lastSaved: Date.now(),
-        }));
-      },
+
       saveProgress: () => {
         const { currentUser } = get();
         if (currentUser && currentUser !== 'teacher') {
           get().updateStudentActivity(currentUser, {});
         }
-        set({ lastSaved: Date.now() });
       },
     }),
     {
       name: 'lexicon-app-storage',
+      partialize: (state) => ({
+        userType: state.userType,
+        currentUser: state.currentUser,
+      }),
     }
   )
 );

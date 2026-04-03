@@ -70,14 +70,14 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     updateLesson(selectedLesson.id, { vocabulary: newVocab, phrases: newPhrases });
   };
 
-  const handleAddStudent = (e: React.FormEvent) => {
+  const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername || !newPassword) return;
     if (studentAccounts.some(s => s.username === newUsername)) {
       alert('Username already exists');
       return;
     }
-    addStudent({ username: newUsername, password: newPassword });
+    await addStudent({ username: newUsername, password: newPassword });
     setNewUsername('');
     setNewPassword('');
   };
@@ -353,7 +353,11 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
                               <Brain size={14} /> General Knowledge
                             </button>
                             <button 
-                              onClick={() => deleteStudent(student.username)}
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to delete ${student.username}?`)) {
+                                  await deleteStudent(student.username);
+                                }
+                              }}
                               className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
                             >
                               <Trash2 size={20} />

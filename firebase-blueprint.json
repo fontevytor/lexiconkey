@@ -1,0 +1,114 @@
+{
+  "entities": {
+    "StudentAccount": {
+      "title": "Student Account",
+      "description": "Student login credentials",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["username", "password"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Custom lesson data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "vocabulary": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "word": { "type": "string" },
+              "translation": { "type": "string" }
+            }
+          }
+        },
+        "phrases": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "title", "vocabulary"]
+    },
+    "LessonProgress": {
+      "title": "Lesson Progress",
+      "description": "Progress of a student in a specific lesson",
+      "type": "object",
+      "properties": {
+        "stars": {
+          "type": "object",
+          "properties": {
+            "flashcards": { "type": "boolean" },
+            "bubble": { "type": "boolean" },
+            "hangman": { "type": "boolean" },
+            "battleship": { "type": "boolean" },
+            "piano": { "type": "boolean" }
+          }
+        },
+        "unlocked": { "type": "boolean" }
+      }
+    },
+    "CustomNote": {
+      "title": "Custom Note",
+      "description": "A sentence or Q&A created by a student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "word": { "type": "string" },
+        "type": { "type": "string", "enum": ["sentence", "qa"] },
+        "text": { "type": "string" },
+        "answer": { "type": "string" }
+      },
+      "required": ["id", "word", "type", "text"]
+    },
+    "VocabularyStats": {
+      "title": "Vocabulary Stats",
+      "description": "Statistics for a specific word for a student",
+      "type": "object",
+      "properties": {
+        "difficulty": { "type": "number" },
+        "viewCount": { "type": "number" }
+      }
+    },
+    "StudentActivity": {
+      "title": "Student Activity",
+      "description": "Real-time activity tracking for a student",
+      "type": "object",
+      "properties": {
+        "lessonId": { "type": "number" },
+        "wordIndex": { "type": "number" },
+        "lastSaved": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "studentAccounts/{username}": {
+      "schema": "StudentAccount",
+      "description": "Collection of student accounts"
+    },
+    "lessons/{lessonId}": {
+      "schema": "Lesson",
+      "description": "Collection of custom lessons"
+    },
+    "userProgress/{username}/lessons/{lessonId}": {
+      "schema": "LessonProgress",
+      "description": "Student progress per lesson"
+    },
+    "userNotes/{username}/notes/{noteId}": {
+      "schema": "CustomNote",
+      "description": "Student custom notes"
+    },
+    "userStats/{username}/words/{word}": {
+      "schema": "VocabularyStats",
+      "description": "Student vocabulary statistics"
+    },
+    "studentActivity/{username}": {
+      "schema": "StudentActivity",
+      "description": "Real-time student activity"
+    }
+  }
+}

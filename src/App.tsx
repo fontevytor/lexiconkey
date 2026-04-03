@@ -49,7 +49,9 @@ export default function App() {
     setCurrentUser,
     studentAccounts,
     userProgress,
-    customLessons 
+    customLessons,
+    initialized,
+    initFirestore
   } = useAppStore();
 
   const [view, setView] = useState<View>('landing');
@@ -60,6 +62,38 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const unsub = initFirestore();
+    return () => unsub();
+  }, [initFirestore]);
+
+  // If user was already logged in (from persist), make sure they are in the right view
+  useEffect(() => {
+    if (initialized && currentUser) {
+      if (currentUser === 'teacher') {
+        setView('teacher');
+      } else {
+        setView('home');
+      }
+    }
+  }, [initialized, currentUser]);
+
+  if (!initialized) {
+    return (
+      <div className="min-h-screen bg-indigo-600 flex flex-col items-center justify-center text-white p-6">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="mb-8"
+        >
+          <Zap size={64} className="text-amber-400" />
+        </motion.div>
+        <h1 className="text-4xl font-black tracking-tighter mb-4">LEXICON</h1>
+        <p className="text-indigo-200 font-bold animate-pulse uppercase tracking-widest text-sm">Connecting to Cloud...</p>
+      </div>
+    );
+  }
 
   const handleLogin = () => {
     if (loginMode === 'teacher') {
