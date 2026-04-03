@@ -1,0 +1,5 @@
+{
+  "name": "Lexicon App",
+  "description": "A language learning app with 30 lessons and 5 interactive games per lesson.",
+  "requestFramePermissions": []
+}
