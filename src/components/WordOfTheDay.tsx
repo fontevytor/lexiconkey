@@ -19,6 +19,31 @@ export default function WordOfTheDay() {
   const currentWotd = currentUser ? wordOfTheDay[currentUser] : null;
   const currentScore = currentUser ? (memoryMasterScore[currentUser] || 0) : 0;
 
+  const [timeLeft, setTimeLeft] = useState<string>('');
+
+  useEffect(() => {
+    if (!currentWotd?.completed || !currentWotd?.completedAt) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const target = currentWotd.completedAt! + 24 * 60 * 60 * 1000;
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setTimeLeft('00:00:00');
+        getWordOfTheDay();
+        clearInterval(interval);
+      } else {
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentWotd?.completed, currentWotd?.completedAt, getWordOfTheDay]);
+
   if (!currentWotd) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -77,10 +102,17 @@ export default function WordOfTheDay() {
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="flex items-center justify-center gap-3 px-6 md:px-10 py-4 md:py-6 bg-emerald-50 text-emerald-600 rounded-2xl md:rounded-3xl border-2 border-emerald-100 font-black text-sm md:text-base text-center"
+                className="flex flex-col items-center justify-center gap-2 px-6 md:px-10 py-4 md:py-6 bg-emerald-50 text-emerald-600 rounded-2xl md:rounded-3xl border-2 border-emerald-100 font-black text-sm md:text-base text-center"
               >
-                <CheckCircle2 size={24} className="shrink-0" />
-                <span>Correct! Come back tomorrow.</span>
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 size={24} className="shrink-0" />
+                  <span>Correct! Come back tomorrow.</span>
+                </div>
+                {timeLeft && (
+                  <div className="text-xs opacity-70 font-mono tracking-widest mt-1">
+                    NEXT WORD IN: {timeLeft}
+                  </div>
+                )}
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 w-full">

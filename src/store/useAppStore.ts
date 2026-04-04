@@ -117,6 +117,7 @@ interface WordOfTheDay {
   translation: string;
   date: string; // YYYY-MM-DD
   completed: boolean;
+  completedAt?: number;
 }
 
 interface AppState {
@@ -634,17 +635,25 @@ export const useAppStore = create<AppState>()(
         const { currentUser, wordOfTheDay, customLessons, userProgress } = get();
         if (!currentUser) return null;
 
-        const today = new Date().toISOString().split('T')[0];
+        const now = Date.now();
         const current = wordOfTheDay[currentUser];
 
-        if (current && current.date === today) {
-          return current;
+        if (current) {
+          if (current.completed) {
+            const elapsed = now - (current.completedAt || 0);
+            if (elapsed < 24 * 60 * 60 * 1000) {
+              return current;
+            }
+          } else {
+            return current;
+          }
         }
 
-        // Pick a new word from unlocked lessons
-        const unlockedLessonIds = Object.entries(userProgress[currentUser] || {})
-          .filter(([_, p]) => p.unlocked)
-          .map(([id]) => Number(id));
+        // Pick a new word from unlocked lessons (Lesson 1 is always unlocked)
+        const unlockedLessonIds = [1];
+        Object.entries(userProgress[currentUser] || {}).forEach(([id, p]) => {
+          if (p.unlocked) unlockedLessonIds.push(Number(id));
+        });
         
         const availableWords = customLessons
           .filter(l => unlockedLessonIds.includes(l.id))
@@ -656,7 +665,7 @@ export const useAppStore = create<AppState>()(
         const newWotd: WordOfTheDay = {
           word: randomWord.word,
           translation: randomWord.translation,
-          date: today,
+          date: new Date().toISOString().split('T')[0],
           completed: false
         };
 
@@ -683,7 +692,7 @@ export const useAppStore = create<AppState>()(
           set(state => ({
             wordOfTheDay: {
               ...state.wordOfTheDay,
-              [currentUser]: { ...current, completed: true }
+              [currentUser]: { ...current, completed: true, completedAt: Date.now() }
             },
             memoryMasterScore: {
               ...state.memoryMasterScore,

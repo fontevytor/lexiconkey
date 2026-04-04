@@ -36,7 +36,7 @@ interface Particle {
 }
 
 const BUBBLE_RADIUS = 18;
-const PROJECTILE_RADIUS = 9;
+const PROJECTILE_RADIUS = 7;
 const COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 const COLOR_NAMES = ['red', 'blue', 'green', 'yellow', 'purple', 'pink'];
 
