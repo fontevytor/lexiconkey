@@ -36,7 +36,7 @@ interface Particle {
 }
 
 const BUBBLE_RADIUS = 18;
-const PROJECTILE_RADIUS = 12;
+const PROJECTILE_RADIUS = 8;
 const COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 const COLOR_NAMES = ['red', 'blue', 'green', 'yellow', 'purple', 'pink'];
 
@@ -126,18 +126,19 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
   }, [lesson]);
 
   useEffect(() => {
-    // Load progress
-    if (currentUser) {
+    // Load progress only once on mount or when lesson changes
+    if (currentUser && !isGameOver) {
       const progress = studentActivity[currentUser]?.gameProgress?.[lesson.id]?.bubble;
       if (progress) {
         setLevel(progress.level);
         setScore(progress.score);
+        // We only want to initLevel if we haven't started yet or if the level is different
         initLevel(progress.level);
       } else {
         initLevel(0);
       }
     }
-  }, [currentUser, lesson.id, studentActivity]);
+  }, [currentUser, lesson.id]); // Removed studentActivity from dependencies to prevent re-init on every update
 
   useEffect(() => {
     if (timeLeft > 0 && !isGameOver) {
@@ -325,7 +326,7 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
       
       if (dy < 0) {
         ctx.setLineDash([8, 4]);
-        ctx.strokeStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.6)' : 'rgba(79, 70, 229, 0.4)';
+        ctx.strokeStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.8)' : 'rgba(79, 70, 229, 0.7)';
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(dragStart.x, dragStart.y);
@@ -342,8 +343,8 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
           
           if (i % 3 === 0) {
             ctx.beginPath();
-            ctx.arc(tx, ty, 2, 0, Math.PI * 2);
-            ctx.fillStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.4)' : 'rgba(79, 70, 229, 0.3)';
+            ctx.arc(tx, ty, 3, 0, Math.PI * 2);
+            ctx.fillStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.7)' : 'rgba(79, 70, 229, 0.6)';
             ctx.fill();
           }
           
@@ -367,7 +368,8 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
       for (const b of bubbles) {
         if (b.isFalling) continue;
         const dist = Math.sqrt((nextX - b.x) ** 2 + (nextY - b.y) ** 2);
-        if (dist < b.radius + shootingBubble.radius) {
+        // Lenient collision: if projectile is near the edge (corner) of a bubble
+        if (dist < b.radius + shootingBubble.radius + 2) {
           hit = true;
           hitBubble = b;
           break;
@@ -385,19 +387,23 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
           });
           setScore(s => s + toExplode.length * 50);
         } else if (hitBubble.isBomb) {
-          // Bomb: destroy area
+          // Bomb: destroy area with random radius
           setShake(10);
-          const radius = BUBBLE_RADIUS * 6;
+          const randomRadius = BUBBLE_RADIUS * (4 + Math.random() * 6);
           bubbles.forEach(b => {
             const d = Math.sqrt((b.x - hitBubble!.x) ** 2 + (b.y - hitBubble!.y) ** 2);
-            if (d < radius) toExplode.push(b.id);
+            if (d < randomRadius) toExplode.push(b.id);
           });
           setScore(s => s + toExplode.length * 50);
         } else if (hitBubble.isLightning) {
-          // Lightning: destroy 5 random bubbles
+          // Lightning: destroy 5 random bubbles + the lightning bubble itself
           setShake(8);
-          const randomIndices = Array.from({ length: Math.min(5, bubbles.length) }, () => Math.floor(Math.random() * bubbles.length));
-          randomIndices.forEach(idx => toExplode.push(bubbles[idx].id));
+          toExplode.push(hitBubble.id);
+          const otherBubbles = bubbles.filter(b => b.id !== hitBubble!.id && !b.isFalling);
+          for (let i = 0; i < Math.min(5, otherBubbles.length); i++) {
+            const idx = Math.floor(Math.random() * otherBubbles.length);
+            toExplode.push(otherBubbles[idx].id);
+          }
           setScore(s => s + toExplode.length * 75);
         } else if (hitBubble.color === shootingBubble.color) {
           // Connected same color logic

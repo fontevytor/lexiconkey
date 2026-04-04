@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Music, AlertCircle, Trophy } from 'lucide-react';
 import { LessonData } from '../data/lessons';
@@ -20,6 +20,7 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
   const [mistakes, setMistakes] = useState(0);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const startLevel = (lvl: number) => {
     if (!lesson.phrases[lvl % lesson.phrases.length]) return;
@@ -40,11 +41,19 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
         startLevel(0);
       }
     }
-  }, [currentUser, lesson.id, studentActivity]);
+  }, [currentUser, lesson.id]); // Removed studentActivity from dependencies
 
   const playNote = (key: string) => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const audioCtx = audioCtxRef.current;
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       
@@ -56,16 +65,25 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
       const row3 = 'ZXCVBNM';
       
       let baseFreq = 261.63; // C4
-      if (row1.includes(key)) baseFreq = 130.81; // C3 (Low)
-      if (row2.includes(key)) baseFreq = 261.63; // C4 (Medium)
-      if (row3.includes(key)) baseFreq = 523.25; // C5 (High)
+      let gainValue = 0.1;
+
+      if (row1.includes(key)) {
+        baseFreq = 174.61; // F3 (Shifted up from C3 for better audibility)
+        gainValue = 0.2; // Louder for low notes
+      } else if (row2.includes(key)) {
+        baseFreq = 261.63; // C4 (Medium)
+        gainValue = 0.12;
+      } else if (row3.includes(key)) {
+        baseFreq = 523.25; // C5 (High)
+        gainValue = 0.08; // Slightly quieter for high notes
+      }
       
       const charIndex = row1.includes(key) ? row1.indexOf(key) : row2.includes(key) ? row2.indexOf(key) : row3.indexOf(key);
       const freq = baseFreq * Math.pow(1.059463, charIndex);
       
       oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
       
-      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(gainValue, audioCtx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
       
       oscillator.connect(gainNode);

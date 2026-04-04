@@ -153,6 +153,7 @@ interface AppState {
   submitWordOfTheDay: (answer: string) => boolean;
   getWordOfTheDay: () => WordOfTheDay | null;
   saveProgress: () => void;
+  resetProgress: () => Promise<void>;
   initFirestore: () => () => void;
   syncUserData: (username: string, isTeacher: boolean) => () => void;
   loginAsTeacher: () => Promise<void>;
@@ -698,6 +699,54 @@ export const useAppStore = create<AppState>()(
         const { currentUser } = get();
         if (currentUser && currentUser !== 'teacher') {
           get().updateStudentActivity(currentUser, {});
+        }
+      },
+      resetProgress: async () => {
+        const { currentUser } = get();
+        if (!currentUser || currentUser === 'teacher') return;
+
+        set(state => {
+          const newStudentActivity = { ...state.studentActivity };
+          delete newStudentActivity[currentUser];
+
+          const newUserProgress = { ...state.userProgress };
+          delete newUserProgress[currentUser];
+
+          const newUserNotes = { ...state.userNotes };
+          delete newUserNotes[currentUser];
+
+          const newUserStats = { ...state.userStats };
+          delete newUserStats[currentUser];
+
+          const newFavoriteCards = { ...state.favoriteCards };
+          delete newFavoriteCards[currentUser];
+
+          const newMemoryMasterScore = { ...state.memoryMasterScore };
+          delete newMemoryMasterScore[currentUser];
+
+          const newWordOfTheDay = { ...state.wordOfTheDay };
+          delete newWordOfTheDay[currentUser];
+
+          return {
+            studentActivity: newStudentActivity,
+            userProgress: newUserProgress,
+            userNotes: newUserNotes,
+            userStats: newUserStats,
+            favoriteCards: newFavoriteCards,
+            memoryMasterScore: newMemoryMasterScore,
+            wordOfTheDay: newWordOfTheDay,
+          };
+        });
+
+        // If teacher mode is on, we should also delete from Firestore
+        if (get().userType === 'teacher') {
+          try {
+            await deleteDoc(doc(db, 'studentActivity', currentUser));
+            // Note: Deleting subcollections in Firestore requires a recursive delete or deleting each doc.
+            // For simplicity in this local-first app, we'll focus on the local reset.
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `studentActivity/${currentUser}`);
+          }
         }
       },
     }),

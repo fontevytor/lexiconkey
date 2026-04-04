@@ -37,7 +37,7 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
         startLevel(0);
       }
     }
-  }, [currentUser, lesson.id, studentActivity]);
+  }, [currentUser, lesson.id]); // Removed studentActivity from dependencies
 
   const handleGuess = (letter: string) => {
     if (guessedLetters.includes(letter) || mistakes >= maxMistakes || isWon || isLost) return;

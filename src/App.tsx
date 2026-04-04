@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, 
@@ -22,7 +22,9 @@ import {
   User,
   ShieldCheck,
   Keyboard,
-  ClipboardList
+  ClipboardList,
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 import { LESSONS, LessonData } from './data/lessons';
 import { useAppStore } from './store/useAppStore';
@@ -62,7 +64,8 @@ export default function App() {
     loginAsTeacher,
     loginAsStudent,
     completeActivity,
-    completeAssignment
+    completeAssignment,
+    resetProgress
   } = useAppStore();
 
   const [view, setView] = useState<View>('landing');
@@ -70,6 +73,7 @@ export default function App() {
   const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<ActivityType | null>(null);
   const [showSaved, setShowSaved] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [loginMode, setLoginMode] = useState<'student' | 'teacher' | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -384,8 +388,59 @@ export default function App() {
                   <Star size={20} className="fill-white" />
                   General Cards
                 </button>
+                <button 
+                  onClick={() => setShowResetConfirm(true)}
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-rose-50 border-2 border-rose-100 rounded-[2rem] hover:border-rose-500 hover:bg-rose-100 transition-all font-black text-rose-600 shadow-sm text-sm"
+                >
+                  <RotateCcw size={20} />
+                  Reset Progress
+                </button>
               </div>
             </header>
+
+            <AnimatePresence>
+              {showResetConfirm && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-slate-100"
+                  >
+                    <div className="w-16 h-16 bg-rose-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                      <AlertCircle size={32} className="text-rose-600" />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-900 text-center mb-2">Reset Progress?</h3>
+                    <p className="text-slate-500 text-center mb-8 font-medium">
+                      This will permanently delete all your game progress, stars, and saved cards. This action cannot be undone.
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowResetConfirm(false)}
+                        className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await resetProgress();
+                          setShowResetConfirm(false);
+                          setView('landing');
+                        }}
+                        className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-lg shadow-rose-500/20 hover:bg-rose-700 transition-colors"
+                      >
+                        Yes, Reset
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <WordOfTheDay />
 
