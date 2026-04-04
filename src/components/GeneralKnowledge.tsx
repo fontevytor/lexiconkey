@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Brain, Search, Plus, Trash2, Edit2, MessageSquare, HelpCircle, X, Save } from 'lucide-react';
+import { ChevronLeft, Brain, Search, Plus, Trash2, Edit2, MessageSquare, HelpCircle, X, Save, Zap } from 'lucide-react';
 import { LESSONS } from '../data/lessons';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
@@ -20,9 +20,11 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
     userStats, 
     updateVocabStats, 
     incrementViewCount,
-    updateStudentActivity
+    updateStudentActivity,
+    favoriteCards
   } = useAppStore();
 
+  const [view, setView] = useState<'selection' | 'list'>('selection');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWord, setSelectedWord] = useState<any | null>(null);
   const [noteType, setNoteType] = useState<'sentence' | 'qa'>('sentence');
@@ -35,6 +37,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
 
   const currentUserNotes = (currentUser && userNotes[currentUser]) || {};
   const currentUserStats = (currentUser && userStats[currentUser]) || {};
+  const favorites = (currentUser && favoriteCards[currentUser]) || [];
 
   const unlockedVocabulary = LESSONS
     .filter(lesson => isLessonUnlocked(lesson.id))
@@ -46,6 +49,9 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
 
   const filteredVocab = unlockedVocabulary
     .filter(v => {
+      const isFavorite = favorites.includes(v.word);
+      if (!isFavorite) return false;
+
       const matchesSearch = v.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            v.translation.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesType = filterType === 'all' || (filterType === 'verbs' && (v.type === 'verb' || (v as any).isVerb));
@@ -116,6 +122,57 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
     setNoteType(note.type);
   };
 
+  if (view === 'selection') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="max-w-4xl mx-auto p-6 pt-24"
+      >
+        <header className="flex items-center gap-4 mb-16">
+          <button onClick={onBack} className="p-3 hover:bg-white rounded-2xl transition-all text-slate-600 shadow-sm border border-slate-100">
+            <ChevronLeft size={24} />
+          </button>
+          <div>
+            <h2 className="text-5xl font-black text-slate-900 tracking-tighter">General <span className="text-indigo-600">Knowledge</span></h2>
+            <p className="text-slate-500 font-medium">Select what you want to study from your favorites.</p>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <button
+            onClick={() => { setFilterType('verbs'); setView('list'); }}
+            className="group p-12 bg-white border-4 border-slate-100 rounded-[4rem] hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all text-left relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Plus size={120} className="text-indigo-600" />
+            </div>
+            <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+              <Zap size={40} />
+            </div>
+            <h3 className="text-4xl font-black text-slate-900 mb-2">Favorited Verbs</h3>
+            <p className="text-slate-500 font-medium text-lg">Review all verbs you've marked as favorites.</p>
+          </button>
+
+          <button
+            onClick={() => { setFilterType('all'); setView('list'); }}
+            className="group p-12 bg-white border-4 border-slate-100 rounded-[4rem] hover:border-emerald-500 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all text-left relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Brain size={120} className="text-emerald-600" />
+            </div>
+            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+              <Brain size={40} />
+            </div>
+            <h3 className="text-4xl font-black text-slate-900 mb-2">Favorited Words</h3>
+            <p className="text-slate-500 font-medium text-lg">Review all vocabulary you've marked as favorites.</p>
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: -20 }}
@@ -125,15 +182,15 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
     >
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-white rounded-full transition-colors text-slate-700 shadow-sm border border-slate-200">
+          <button onClick={() => setView('selection')} className="p-2 hover:bg-white rounded-full transition-colors text-slate-700 shadow-sm border border-slate-200">
             <ChevronLeft size={24} />
           </button>
           <div>
             <h2 className="text-4xl font-black text-slate-900 flex items-center gap-3 tracking-tighter">
-              <Brain className="text-indigo-600" />
-              General Knowledge
+              {filterType === 'verbs' ? <Zap className="text-indigo-600" /> : <Brain className="text-emerald-600" />}
+              {filterType === 'verbs' ? 'Favorited Verbs' : 'Favorited Words'}
             </h2>
-            <p className="text-slate-700 font-medium">All words you've unlocked so far.</p>
+            <p className="text-slate-700 font-medium">Reviewing your favorited {filterType === 'verbs' ? 'verbs' : 'vocabulary'}.</p>
           </div>
         </div>
 
