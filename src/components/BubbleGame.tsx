@@ -50,7 +50,7 @@ interface Bubble {
   col: number;
   isBomb?: boolean;
   isAddRow?: boolean;
-  isColorShift?: boolean;
+  isLightning?: boolean;
   isFalling?: boolean;
   vy?: number;
 }
@@ -75,6 +75,7 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
   const [shake, setShake] = useState(0);
   const [showLevelIntro, setShowLevelIntro] = useState(true);
   const [lastLevelScore, setLastLevelScore] = useState(0);
+  const [showNewRowAnim, setShowNewRowAnim] = useState(false);
   
   const { currentUser, studentActivity, updateGameProgress, completeActivity } = useAppStore();
   const requestRef = useRef<number>(null);
@@ -104,20 +105,20 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
 
         const rand = Math.random();
         const isBomb = rand < 0.04;
-        const isAddRow = !isBomb && rand < 0.07;
-        const isColorShift = !isBomb && !isAddRow && rand < 0.1;
+        const isAddRow = !isBomb && rand < 0.06;
+        const isLightning = !isBomb && !isAddRow && rand < 0.08;
 
         newBubbles.push({
           id: `${r}-${c}`,
           x,
           y,
-          color: isBomb ? '#334155' : isAddRow ? '#000000' : isColorShift ? '#ffffff' : COLORS[Math.floor(Math.random() * COLORS.length)],
+          color: isBomb ? '#334155' : isAddRow ? '#000000' : isLightning ? '#fbbf24' : COLORS[Math.floor(Math.random() * COLORS.length)],
           radius: BUBBLE_RADIUS,
           row: r,
           col: c,
           isBomb,
           isAddRow,
-          isColorShift
+          isLightning
         });
       }
     }
@@ -136,7 +137,7 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
         initLevel(0);
       }
     }
-  }, [currentUser, lesson.id]);
+  }, [currentUser, lesson.id, studentActivity]);
 
   useEffect(() => {
     if (timeLeft > 0 && !isGameOver) {
@@ -306,12 +307,12 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('➕', b.x, b.y);
-      } else if (b.isColorShift) {
-        ctx.fillStyle = 'black';
+      } else if (b.isLightning) {
+        ctx.fillStyle = 'white';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🎨', b.x, b.y);
+        ctx.fillText('⚡', b.x, b.y);
       }
     });
 
@@ -392,6 +393,12 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
             if (d < radius) toExplode.push(b.id);
           });
           setScore(s => s + toExplode.length * 50);
+        } else if (hitBubble.isLightning) {
+          // Lightning: destroy 5 random bubbles
+          setShake(8);
+          const randomIndices = Array.from({ length: Math.min(5, bubbles.length) }, () => Math.floor(Math.random() * bubbles.length));
+          randomIndices.forEach(idx => toExplode.push(bubbles[idx].id));
+          setScore(s => s + toExplode.length * 75);
         } else if (hitBubble.color === shootingBubble.color) {
           // Connected same color logic
           const connected: string[] = [];
@@ -476,34 +483,43 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
               completeActivity(lesson.id, 'bubble');
               setTimeout(onComplete, 2000);
             } else {
-              setLevel(l => l + 1);
-              initLevel(level + 1);
+              const nextLevel = level + 1;
+              updateGameProgress(lesson.id, 'bubble', { level: nextLevel, score: score + toExplode.length * 100 });
+              setLevel(nextLevel);
+              initLevel(nextLevel);
             }
           }
         } else {
-          // Missed color - add row
+          // Missed color - add 2 rows
+          setShowNewRowAnim(true);
+          setTimeout(() => setShowNewRowAnim(false), 1000);
+          setShake(5);
+          
           setBubbles(prev => {
-            const shifted = prev.map(b => ({ ...b, y: b.y + BUBBLE_RADIUS * 1.7, row: b.row + 1 }));
-            const newRow: Bubble[] = [];
+            const shifted = prev.map(b => ({ ...b, y: b.y + BUBBLE_RADIUS * 1.7 * 2, row: b.row + 2 }));
+            const newRows: Bubble[] = [];
             const cols = 14;
-            for (let c = 0; c < cols; c++) {
-              const offset = (prev.length % 2 === 0 ? 0 : BUBBLE_RADIUS);
-              const x = c * BUBBLE_RADIUS * 2 + BUBBLE_RADIUS + offset;
-              if (x > 500 - BUBBLE_RADIUS) continue;
+            
+            for (let r = 0; r < 2; r++) {
+              for (let c = 0; c < cols; c++) {
+                const offset = ((prev.length + r) % 2 === 0 ? 0 : BUBBLE_RADIUS);
+                const x = c * BUBBLE_RADIUS * 2 + BUBBLE_RADIUS + offset;
+                if (x > 500 - BUBBLE_RADIUS) continue;
 
-              const isBomb = Math.random() < 0.05;
-              newRow.push({
-                id: `new-${Date.now()}-${c}`,
-                x,
-                y: BUBBLE_RADIUS,
-                color: isBomb ? '#334155' : COLORS[Math.floor(Math.random() * COLORS.length)],
-                radius: BUBBLE_RADIUS,
-                row: 0,
-                col: c,
-                isBomb
-              });
+                const isBomb = Math.random() < 0.05;
+                newRows.push({
+                  id: `new-${Date.now()}-${r}-${c}`,
+                  x,
+                  y: BUBBLE_RADIUS + (r * BUBBLE_RADIUS * 1.7),
+                  color: isBomb ? '#334155' : COLORS[Math.floor(Math.random() * COLORS.length)],
+                  radius: BUBBLE_RADIUS,
+                  row: r,
+                  col: c,
+                  isBomb
+                });
+              }
             }
-            const combined = [...shifted, ...newRow];
+            const combined = [...shifted, ...newRows];
             if (combined.some(b => !b.isFalling && b.y > canvas.height - 150)) {
               setIsGameOver(true);
             }
@@ -610,21 +626,43 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
       </div>
 
       <div className={cn(
-        "flex-1 relative border-4 border-white rounded-[2rem] md:rounded-[3rem] bg-white shadow-2xl overflow-hidden touch-none transition-transform",
+        "flex-1 relative flex items-center justify-center overflow-hidden touch-none",
         shake > 0 && "animate-shake"
       )}>
-        <canvas 
-          ref={canvasRef}
-          width={500}
-          height={600}
-          className="w-full h-full"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onTouchStart={handleMouseDown}
-          onTouchMove={handleMouseMove}
-          onTouchEnd={handleMouseUp}
-        />
+        <div className="relative aspect-[5/6] h-full max-h-[600px] border-4 border-white rounded-[2rem] md:rounded-[3rem] bg-white shadow-2xl overflow-hidden">
+          <canvas 
+            ref={canvasRef}
+            width={500}
+            height={600}
+            className="w-full h-full object-contain"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onTouchStart={handleMouseDown}
+            onTouchMove={handleMouseMove}
+            onTouchEnd={handleMouseUp}
+          />
+
+          <AnimatePresence>
+            {showNewRowAnim && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.5 }}
+                className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none"
+              >
+                <div className="bg-rose-500/20 backdrop-blur-sm w-full h-full flex items-center justify-center">
+                  <motion.h2 
+                    animate={{ y: [0, -20, 0] }}
+                    transition={{ repeat: Infinity, duration: 0.5 }}
+                    className="text-6xl font-black text-rose-600 drop-shadow-lg"
+                  >
+                    NEW ROWS!
+                  </motion.h2>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
         <AnimatePresence>
           {showLevelIntro && !isGameOver && (
@@ -684,6 +722,7 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
             <span className="text-slate-900 font-black text-sm">Cooldown: {cooldown}s</span>
           </div>
         )}
+        </div>
       </div>
 
       <div className="mt-6 md:mt-10 flex flex-col items-center gap-4 md:gap-6 z-10">

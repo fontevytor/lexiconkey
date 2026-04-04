@@ -33,7 +33,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
         setLevel(progress.level);
       }
     }
-  }, [currentUser, lesson.id]);
+  }, [currentUser, lesson.id, studentActivity]);
 
   useEffect(() => {
     const letters = targetWord.split('');

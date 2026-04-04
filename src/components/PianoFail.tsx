@@ -40,7 +40,7 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
         startLevel(0);
       }
     }
-  }, [currentUser, lesson.id]);
+  }, [currentUser, lesson.id, studentActivity]);
 
   const playNote = (key: string) => {
     try {
