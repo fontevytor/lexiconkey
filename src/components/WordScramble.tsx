@@ -20,6 +20,29 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
   const [shuffledLetters, setShuffledLetters] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [incorrectAttempts, setIncorrectAttempts] = useState(0);
+  const [hint, setHint] = useState<{ index: number; letter: string } | null>(null);
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+
+  const playSound = (freq: number, type: 'sine' | 'square' | 'sawtooth' | 'triangle' = 'sine', duration: number = 0.3) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const audioCtx = audioCtxRef.current;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    } catch (e) { console.warn(e); }
+  };
 
   const vocabulary = lesson.vocabulary;
   const currentWord = vocabulary[level % vocabulary.length];
@@ -41,6 +64,8 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
     setShuffledLetters(shuffled);
     setUserInput([]);
     setIsCorrect(null);
+    setIncorrectAttempts(0);
+    setHint(null);
   }, [level, targetWord]);
 
   const handleLetterClick = (letter: string, index: number) => {
@@ -53,9 +78,15 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
     newShuffled.splice(index, 1);
     setShuffledLetters(newShuffled);
 
+    // Play ascending pitch sound
+    const baseFreq = 261.63; // C4
+    const freq = baseFreq * Math.pow(1.059463, newInput.length * 2);
+    playSound(freq);
+
     if (newInput.length === targetWord.length) {
       if (newInput.join('') === targetWord) {
         setIsCorrect(true);
+        playSound(523.25, 'sine', 0.5); // Success sound
         if (level === 9) {
           confetti();
           setShowSuccess(true);
@@ -70,8 +101,15 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
         }
       } else {
         setIsCorrect(false);
+        setIncorrectAttempts(prev => prev + 1);
+        playSound(150, 'sawtooth', 0.5); // Error sound
+        
+        if (incorrectAttempts + 1 >= 3) {
+          const randIdx = Math.floor(Math.random() * targetWord.length);
+          setHint({ index: randIdx, letter: targetWord[randIdx] });
+        }
+
         setTimeout(() => {
-          // Reset level
           const letters = targetWord.split('');
           setShuffledLetters([...letters].sort(() => Math.random() - 0.5));
           setUserInput([]);
@@ -124,24 +162,37 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
               </div>
 
               {/* Answer Slots */}
-              <div className="flex flex-wrap justify-center gap-2 min-h-[64px]">
-                {targetWord.split('').map((_, i) => (
-                  <motion.button
-                    key={`slot-${i}`}
-                    whileHover={{ scale: userInput[i] ? 1.05 : 1 }}
-                    onClick={() => userInput[i] && handleRemoveLetter(i)}
-                    className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all
-                      ${userInput[i] 
-                        ? 'bg-white border-indigo-600 text-indigo-600 shadow-md cursor-pointer' 
-                        : 'bg-gray-50 border-dashed border-gray-300'
-                      }
-                      ${isCorrect === true ? 'border-green-500 bg-green-50 text-green-700' : ''}
-                      ${isCorrect === false ? 'border-red-500 bg-red-50 text-red-700' : ''}
-                    `}
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex flex-wrap justify-center gap-2 min-h-[64px]">
+                  {targetWord.split('').map((_, i) => (
+                    <motion.button
+                      key={`slot-${i}`}
+                      whileHover={{ scale: userInput[i] ? 1.05 : 1 }}
+                      onClick={() => userInput[i] && handleRemoveLetter(i)}
+                      className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all
+                        ${userInput[i] 
+                          ? 'bg-white border-indigo-600 text-indigo-600 shadow-md cursor-pointer' 
+                          : 'bg-gray-50 border-dashed border-gray-300'
+                        }
+                        ${isCorrect === true ? 'border-green-500 bg-green-50 text-green-700' : ''}
+                        ${isCorrect === false ? 'border-red-500 bg-red-50 text-red-700' : ''}
+                        ${hint?.index === i ? 'ring-4 ring-amber-400 ring-offset-2' : ''}
+                      `}
+                    >
+                      {userInput[i]}
+                    </motion.button>
+                  ))}
+                </div>
+                {hint && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-amber-50 border-2 border-amber-200 px-4 py-2 rounded-2xl text-amber-700 font-bold text-sm flex items-center gap-2"
                   >
-                    {userInput[i]}
-                  </motion.button>
-                ))}
+                    <Star size={16} className="fill-amber-500 text-amber-500" />
+                    Hint: Letter "{hint.letter}" is at position {hint.index + 1}
+                  </motion.div>
+                )}
               </div>
 
               {/* Letter Bank */}

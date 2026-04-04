@@ -6,22 +6,31 @@ import { AssignmentQuestion } from '../data/lessons';
 
 interface AssignmentProps {
   questions: AssignmentQuestion[];
-  onComplete: () => void;
+  onComplete: (answers: string[], grade: string) => void;
   onClose: () => void;
+  existingAnswers?: string[];
+  existingGrade?: string;
 }
 
-export const Assignment: React.FC<AssignmentProps> = ({ questions, onComplete, onClose }) => {
+export const Assignment: React.FC<AssignmentProps> = ({ 
+  questions, 
+  onComplete, 
+  onClose,
+  existingAnswers,
+  existingGrade
+}) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState<string[]>(new Array(questions.length).fill(''));
-  const [showResults, setShowResults] = useState(false);
+  const [answers, setAnswers] = useState<string[]>(existingAnswers || new Array(questions.length).fill(''));
+  const [showResults, setShowResults] = useState(!!existingAnswers);
 
   const handleNext = () => {
     if (currentStep < questions.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
+      const grade = calculateGrade();
       setShowResults(true);
       confetti();
-      onComplete();
+      onComplete(answers, grade);
     }
   };
 
@@ -67,7 +76,7 @@ export const Assignment: React.FC<AssignmentProps> = ({ questions, onComplete, o
   };
 
   if (showResults) {
-    const grade = calculateGrade();
+    const grade = existingGrade || calculateGrade();
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col overflow-y-auto">
         <div className="p-4 flex items-center justify-between border-b sticky top-0 bg-white z-10">

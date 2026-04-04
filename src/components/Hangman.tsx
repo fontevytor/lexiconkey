@@ -18,6 +18,27 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
   const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState(0);
   const maxMistakes = 6;
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+
+  const playSound = (freq: number, type: 'sine' | 'square' | 'sawtooth' | 'triangle' = 'sine', duration: number = 0.3) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const audioCtx = audioCtxRef.current;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    } catch (e) { console.warn(e); }
+  };
 
   const startLevel = (lvl: number) => {
     const word = lesson.vocabulary[lvl % lesson.vocabulary.length].word.toUpperCase();
@@ -45,6 +66,9 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
     setGuessedLetters([...guessedLetters, letter]);
     if (!targetWord.includes(letter)) {
       setMistakes(mistakes + 1);
+      playSound(150, 'sawtooth', 0.4); // Wrong guess
+    } else {
+      playSound(440, 'sine', 0.2); // Correct guess
     }
   };
 
@@ -53,6 +77,7 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
 
   useEffect(() => {
     if (isWon) {
+      playSound(523.25, 'sine', 0.5); // Success
       if (level === 9) {
         confetti({ particleCount: 150, spread: 70 });
         completeActivity(lesson.id, 'hangman');
@@ -67,6 +92,12 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
       }
     }
   }, [isWon]);
+
+  useEffect(() => {
+    if (isLost) {
+      playSound(100, 'square', 0.8); // Game over
+    }
+  }, [isLost]);
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 

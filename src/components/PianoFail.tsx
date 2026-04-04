@@ -62,20 +62,20 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
       // Determine pitch based on row
       const row1 = 'QWERTYUIOP';
       const row2 = 'ASDFGHJKL';
-      const row3 = 'ZXCVBNM';
+      const row3 = "ZXCVBNM'";
       
       let baseFreq = 261.63; // C4
       let gainValue = 0.1;
 
       if (row1.includes(key)) {
-        baseFreq = 174.61; // F3 (Shifted up from C3 for better audibility)
-        gainValue = 0.2; // Louder for low notes
+        baseFreq = 174.61; // F3
+        gainValue = 0.2;
       } else if (row2.includes(key)) {
-        baseFreq = 261.63; // C4 (Medium)
+        baseFreq = 261.63; // C4
         gainValue = 0.12;
       } else if (row3.includes(key)) {
-        baseFreq = 523.25; // C5 (High)
-        gainValue = 0.08; // Slightly quieter for high notes
+        baseFreq = 523.25; // C5
+        gainValue = 0.08;
       }
       
       const charIndex = row1.includes(key) ? row1.indexOf(key) : row2.includes(key) ? row2.indexOf(key) : row3.indexOf(key);
@@ -124,14 +124,47 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
 
   const isWon = targetPhrase.split('').every(char => char === ' ' || guessedLetters.includes(char));
 
+  const playCustomNote = (freq: number, gainValue: number = 0.1) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const audioCtx = audioCtxRef.current;
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      
+      gainNode.gain.setValueAtTime(gainValue, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {
+      console.warn('Audio context failed', e);
+    }
+  };
+
   const playPhraseAsSong = async () => {
     const letters = targetPhrase.replace(/\s/g, '').split('');
-    for (const char of letters) {
-      playNote(char);
+    const baseFreq = 220; // A3
+    for (let i = 0; i < letters.length; i++) {
+      const char = letters[i];
+      const freq = baseFreq * Math.pow(1.059463, i); // Ascending scale
+      playCustomNote(freq);
       setActiveKey(char);
-      await new Promise(resolve => setTimeout(resolve, 150)); // Faster (was 300)
+      await new Promise(resolve => setTimeout(resolve, 150));
       setActiveKey(null);
-      await new Promise(resolve => setTimeout(resolve, 50)); // Faster (was 100)
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
   };
 
@@ -227,7 +260,7 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
 
         {/* Piano Keyboard */}
         <div className="w-full max-w-3xl mt-auto pb-12 space-y-2">
-          {[row1, row2, row3].map((row, rowIdx) => (
+          {['QWERTYUIOP'.split(''), 'ASDFGHJKL'.split(''), "ZXCVBNM'".split('')].map((row, rowIdx) => (
             <div key={rowIdx} className="flex justify-center gap-1">
               {row.map(key => {
                 const isCorrect = guessedLetters.includes(key) && targetPhrase.includes(key);

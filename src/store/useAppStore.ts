@@ -86,6 +86,8 @@ interface LessonProgress {
   };
   unlocked: boolean;
   assignmentCompleted?: boolean;
+  assignmentAnswers?: string[];
+  assignmentGrade?: string;
 }
 
 interface VocabularyStats {
@@ -138,7 +140,7 @@ interface AppState {
   updateStudentActivity: (username: string, activity: Partial<StudentActivity>) => Promise<void>;
   updateGameProgress: (lessonId: number, game: keyof GameState, progress: any) => Promise<void>;
   completeActivity: (lessonId: number, activity: keyof LessonProgress['stars']) => Promise<void>;
-  completeAssignment: (lessonId: number) => Promise<void>;
+  completeAssignment: (lessonId: number, answers: string[], grade: string) => Promise<void>;
   isLessonUnlocked: (lessonId: number) => boolean;
   getStarsCount: (lessonId: number, username?: string) => number;
   addNote: (word: string, note: Omit<CustomNote, 'id'>) => Promise<void>;
@@ -403,7 +405,7 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      completeAssignment: async (lessonId) => {
+      completeAssignment: async (lessonId, answers, grade) => {
         const { currentUser } = get();
         if (!currentUser) return;
 
@@ -413,7 +415,12 @@ export const useAppStore = create<AppState>()(
           unlocked: lessonId === 1,
         };
 
-        const newLessonProgress = { ...currentProgress, assignmentCompleted: true };
+        const newLessonProgress = { 
+          ...currentProgress, 
+          assignmentCompleted: true,
+          assignmentAnswers: answers,
+          assignmentGrade: grade
+        };
         
         set(state => ({
           userProgress: { 

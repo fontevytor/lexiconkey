@@ -740,8 +740,10 @@ export default function App() {
         {view === 'assignment' && selectedLesson && (
           <Assignment 
             questions={selectedLesson.assignments || []}
-            onComplete={() => completeAssignment(selectedLesson.id)}
+            onComplete={(answers, grade) => completeAssignment(selectedLesson.id, answers, grade)}
             onClose={() => setView('lesson-detail')}
+            existingAnswers={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.assignmentAnswers : undefined}
+            existingGrade={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.assignmentGrade : undefined}
           />
         )}
 
