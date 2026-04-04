@@ -12,26 +12,35 @@ interface HangmanProps {
 }
 
 export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
+  const { currentUser, studentActivity, updateGameProgress, completeActivity } = useAppStore();
   const [level, setLevel] = useState(0);
   const [targetWord, setTargetWord] = useState('');
   const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState(0);
   const maxMistakes = 6;
-  const { completeActivity } = useAppStore();
 
   const startLevel = (lvl: number) => {
-    const word = lesson.vocabulary[lvl % lesson.vocabulary.length].word;
+    const word = lesson.vocabulary[lvl % lesson.vocabulary.length].word.toUpperCase();
     setTargetWord(word);
     setGuessedLetters([]);
     setMistakes(0);
   };
 
   useEffect(() => {
-    startLevel(0);
-  }, [lesson]);
+    // Load progress
+    if (currentUser) {
+      const progress = studentActivity[currentUser]?.gameProgress?.[lesson.id]?.hangman;
+      if (progress) {
+        setLevel(progress.level);
+        startLevel(progress.level);
+      } else {
+        startLevel(0);
+      }
+    }
+  }, [currentUser, lesson.id]);
 
   const handleGuess = (letter: string) => {
-    if (guessedLetters.includes(letter) || mistakes >= maxMistakes) return;
+    if (guessedLetters.includes(letter) || mistakes >= maxMistakes || isWon || isLost) return;
 
     setGuessedLetters([...guessedLetters, letter]);
     if (!targetWord.includes(letter)) {
@@ -39,7 +48,7 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
     }
   };
 
-  const isWon = targetWord.split('').every(char => guessedLetters.includes(char));
+  const isWon = targetWord.length > 0 && targetWord.split('').every(char => guessedLetters.includes(char));
   const isLost = mistakes >= maxMistakes;
 
   useEffect(() => {
@@ -49,9 +58,11 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
         completeActivity(lesson.id, 'hangman');
         setTimeout(onComplete, 2000);
       } else {
+        const nextLevel = level + 1;
+        updateGameProgress(lesson.id, 'hangman', { level: nextLevel, score: 0 });
         setTimeout(() => {
-          setLevel(level + 1);
-          startLevel(level + 1);
+          setLevel(nextLevel);
+          startLevel(nextLevel);
         }, 1000);
       }
     }

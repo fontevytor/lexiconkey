@@ -98,10 +98,25 @@ interface StudentAccount {
   password: string;
 }
 
+interface GameState {
+  bubble?: { level: number; score: number };
+  scramble?: { level: number };
+  hangman?: { level: number };
+  piano?: { level: number };
+}
+
 interface StudentActivity {
   lessonId: number;
   wordIndex: number;
   lastSaved: number;
+  gameProgress: Record<number, GameState>; // Key is lessonId
+}
+
+interface WordOfTheDay {
+  word: string;
+  translation: string;
+  date: string; // YYYY-MM-DD
+  completed: boolean;
 }
 
 interface AppState {
@@ -112,12 +127,15 @@ interface AppState {
   userNotes: Record<string, Record<string, CustomNote[]>>; // Key 1: username, Key 2: word
   userStats: Record<string, Record<string, VocabularyStats>>; // Key 1: username, Key 2: word
   favoriteCards: Record<string, string[]>; // Key: username, Value: list of words
+  memoryMasterScore: Record<string, number>; // Key: username
+  wordOfTheDay: Record<string, WordOfTheDay>; // Key: username
   customLessons: LessonData[];
   lastSaved: number;
   initialized: boolean;
   setUserType: (type: 'student' | 'teacher' | null) => void;
   setCurrentUser: (username: string | null) => void;
   updateStudentActivity: (username: string, activity: Partial<StudentActivity>) => Promise<void>;
+  updateGameProgress: (lessonId: number, game: keyof GameState, progress: any) => Promise<void>;
   completeActivity: (lessonId: number, activity: keyof LessonProgress['stars']) => Promise<void>;
   completeAssignment: (lessonId: number) => Promise<void>;
   isLessonUnlocked: (lessonId: number) => boolean;
@@ -132,6 +150,8 @@ interface AppState {
   addLesson: (lesson: LessonData) => Promise<void>;
   reorderLessons: (newLessons: LessonData[]) => Promise<void>;
   toggleFavoriteCard: (word: string) => void;
+  submitWordOfTheDay: (answer: string) => boolean;
+  getWordOfTheDay: () => WordOfTheDay | null;
   saveProgress: () => void;
   initFirestore: () => () => void;
   syncUserData: (username: string, isTeacher: boolean) => () => void;
@@ -150,6 +170,8 @@ export const useAppStore = create<AppState>()(
       userNotes: {},
       userStats: {},
       favoriteCards: {},
+      memoryMasterScore: {},
+      wordOfTheDay: {},
       customLessons: LESSONS,
       lastSaved: Date.now(),
       initialized: false,
@@ -292,7 +314,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateStudentActivity: async (username, activity) => {
-        const current = get().studentActivity[username] || { lessonId: 1, wordIndex: 0, lastSaved: Date.now() };
+        const current = get().studentActivity[username] || { lessonId: 1, wordIndex: 0, lastSaved: Date.now(), gameProgress: {} };
         const updated = { ...current, ...activity, lastSaved: Date.now() };
         
         set(state => ({
@@ -302,6 +324,31 @@ export const useAppStore = create<AppState>()(
         if (get().userType === 'teacher') {
           await setDoc(doc(db, 'studentActivity', username), updated);
         }
+      },
+
+      updateGameProgress: async (lessonId, game, progress) => {
+        const { currentUser, studentActivity } = get();
+        if (!currentUser) return;
+
+        const currentActivity = studentActivity[currentUser] || { lessonId, wordIndex: 0, gameProgress: {}, lastSaved: Date.now() };
+        const lessonProgress = currentActivity.gameProgress[lessonId] || {};
+        
+        set(state => ({
+          studentActivity: {
+            ...state.studentActivity,
+            [currentUser]: {
+              ...currentActivity,
+              gameProgress: {
+                ...currentActivity.gameProgress,
+                [lessonId]: {
+                  ...lessonProgress,
+                  [game]: progress
+                }
+              },
+              lastSaved: Date.now()
+            }
+          }
+        }));
       },
 
       completeActivity: async (lessonId, activity) => {
@@ -388,7 +435,7 @@ export const useAppStore = create<AppState>()(
         const targetUser = username || currentUser;
         if (!targetUser || targetUser === 'teacher') return 0;
         const p = userProgress[targetUser]?.[lessonId];
-        if (!p) return 0;
+        if (!p || !p.stars) return 0;
         return Object.values(p.stars).filter(Boolean).length;
       },
 
@@ -582,6 +629,71 @@ export const useAppStore = create<AppState>()(
         });
       },
 
+      getWordOfTheDay: () => {
+        const { currentUser, wordOfTheDay, customLessons, userProgress } = get();
+        if (!currentUser) return null;
+
+        const today = new Date().toISOString().split('T')[0];
+        const current = wordOfTheDay[currentUser];
+
+        if (current && current.date === today) {
+          return current;
+        }
+
+        // Pick a new word from unlocked lessons
+        const unlockedLessonIds = Object.entries(userProgress[currentUser] || {})
+          .filter(([_, p]) => p.unlocked)
+          .map(([id]) => Number(id));
+        
+        const availableWords = customLessons
+          .filter(l => unlockedLessonIds.includes(l.id))
+          .flatMap(l => l.vocabulary);
+
+        if (availableWords.length === 0) return null;
+
+        const randomWord = availableWords[Math.floor(Math.random() * availableWords.length)];
+        const newWotd: WordOfTheDay = {
+          word: randomWord.word,
+          translation: randomWord.translation,
+          date: today,
+          completed: false
+        };
+
+        set(state => ({
+          wordOfTheDay: {
+            ...state.wordOfTheDay,
+            [currentUser]: newWotd
+          }
+        }));
+
+        return newWotd;
+      },
+
+      submitWordOfTheDay: (answer) => {
+        const { currentUser, wordOfTheDay, memoryMasterScore } = get();
+        if (!currentUser) return false;
+
+        const current = wordOfTheDay[currentUser];
+        if (!current || current.completed) return false;
+
+        const isCorrect = answer.toLowerCase().trim() === current.translation.toLowerCase().trim();
+
+        if (isCorrect) {
+          set(state => ({
+            wordOfTheDay: {
+              ...state.wordOfTheDay,
+              [currentUser]: { ...current, completed: true }
+            },
+            memoryMasterScore: {
+              ...state.memoryMasterScore,
+              [currentUser]: (state.memoryMasterScore[currentUser] || 0) + 1
+            }
+          }));
+        }
+
+        return isCorrect;
+      },
+
       saveProgress: () => {
         const { currentUser } = get();
         if (currentUser && currentUser !== 'teacher') {
@@ -599,6 +711,8 @@ export const useAppStore = create<AppState>()(
         userNotes: state.userNotes,
         userStats: state.userStats,
         favoriteCards: state.favoriteCards,
+        memoryMasterScore: state.memoryMasterScore,
+        wordOfTheDay: state.wordOfTheDay,
       }),
     }
   )

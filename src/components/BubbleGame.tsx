@@ -36,8 +36,24 @@ interface Particle {
 }
 
 const BUBBLE_RADIUS = 18;
+const PROJECTILE_RADIUS = 12;
 const COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 const COLOR_NAMES = ['red', 'blue', 'green', 'yellow', 'purple', 'pink'];
+
+interface Bubble {
+  id: string;
+  x: number;
+  y: number;
+  color: string;
+  radius: number;
+  row: number;
+  col: number;
+  isBomb?: boolean;
+  isAddRow?: boolean;
+  isColorShift?: boolean;
+  isFalling?: boolean;
+  vy?: number;
+}
 
 export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,13 +68,15 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
   
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
-  const [shootingBubble, setShootingBubble] = useState<{ x: number, y: number, color: string, char: string, vx: number, vy: number, isPowerUp?: boolean } | null>(null);
+  const [shootingBubble, setShootingBubble] = useState<{ x: number, y: number, color: string, char: string, vx: number, vy: number, isPowerUp?: boolean, radius: number } | null>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [dragCurrent, setDragCurrent] = useState<Point | null>(null);
   
   const [shake, setShake] = useState(0);
+  const [showLevelIntro, setShowLevelIntro] = useState(true);
+  const [lastLevelScore, setLastLevelScore] = useState(0);
   
-  const { completeActivity } = useAppStore();
+  const { currentUser, studentActivity, updateGameProgress, completeActivity } = useAppStore();
   const requestRef = useRef<number>(null);
 
   const initLevel = useCallback((lvl: number) => {
@@ -70,6 +88,7 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
     setCooldown(0);
     setShootingBubble(null);
     setParticles([]);
+    setShowLevelIntro(true);
     setPowerUpIndex(Math.random() < 0.3 ? Math.floor(Math.random() * word.length) : null);
 
     const newBubbles: Bubble[] = [];
@@ -81,19 +100,24 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
         const x = c * BUBBLE_RADIUS * 2 + BUBBLE_RADIUS + offset;
         const y = r * BUBBLE_RADIUS * 1.7 + BUBBLE_RADIUS;
         
-        // Don't place bubbles outside canvas width
         if (x > 500 - BUBBLE_RADIUS) continue;
 
-        const isBomb = Math.random() < 0.04;
+        const rand = Math.random();
+        const isBomb = rand < 0.04;
+        const isAddRow = !isBomb && rand < 0.07;
+        const isColorShift = !isBomb && !isAddRow && rand < 0.1;
+
         newBubbles.push({
           id: `${r}-${c}`,
           x,
           y,
-          color: isBomb ? '#334155' : COLORS[Math.floor(Math.random() * COLORS.length)],
+          color: isBomb ? '#334155' : isAddRow ? '#000000' : isColorShift ? '#ffffff' : COLORS[Math.floor(Math.random() * COLORS.length)],
           radius: BUBBLE_RADIUS,
           row: r,
           col: c,
-          isBomb
+          isBomb,
+          isAddRow,
+          isColorShift
         });
       }
     }
@@ -101,8 +125,18 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
   }, [lesson]);
 
   useEffect(() => {
-    initLevel(0);
-  }, [initLevel]);
+    // Load progress
+    if (currentUser) {
+      const progress = studentActivity[currentUser]?.gameProgress?.[lesson.id]?.bubble;
+      if (progress) {
+        setLevel(progress.level);
+        setScore(progress.score);
+        initLevel(progress.level);
+      } else {
+        initLevel(0);
+      }
+    }
+  }, [currentUser, lesson.id]);
 
   useEffect(() => {
     if (timeLeft > 0 && !isGameOver) {
@@ -178,7 +212,8 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
           char: targetWord[currentLetterIndex],
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          isPowerUp: currentLetterIndex === powerUpIndex
+          isPowerUp: currentLetterIndex === powerUpIndex,
+          radius: PROJECTILE_RADIUS
         });
       }
     }
@@ -265,6 +300,18 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('💣', b.x, b.y);
+      } else if (b.isAddRow) {
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('➕', b.x, b.y);
+      } else if (b.isColorShift) {
+        ctx.fillStyle = 'black';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🎨', b.x, b.y);
       }
     });
 
@@ -311,14 +358,15 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
       const nextY = shootingBubble.y + shootingBubble.vy;
       
       let newVx = shootingBubble.vx;
-      if (nextX < BUBBLE_RADIUS || nextX > canvas.width - BUBBLE_RADIUS) newVx *= -1;
+      if (nextX < shootingBubble.radius || nextX > canvas.width - shootingBubble.radius) newVx *= -1;
 
-      // Check collision with top bubbles
+      // Check collision with bubbles
       let hit = false;
       let hitBubble: Bubble | null = null;
       for (const b of bubbles) {
+        if (b.isFalling) continue;
         const dist = Math.sqrt((nextX - b.x) ** 2 + (nextY - b.y) ** 2);
-        if (dist < BUBBLE_RADIUS * 1.8) { // Slightly smaller collision for better feel
+        if (dist < b.radius + shootingBubble.radius) {
           hit = true;
           hitBubble = b;
           break;
@@ -577,6 +625,38 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
           onTouchMove={handleMouseMove}
           onTouchEnd={handleMouseUp}
         />
+
+        <AnimatePresence>
+          {showLevelIntro && !isGameOver && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6"
+            >
+              <motion.div
+                initial={{ scale: 0.8, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="bg-white rounded-[3rem] p-10 text-center max-w-sm w-full shadow-2xl"
+              >
+                <div className="w-20 h-20 bg-indigo-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+                  <Target size={40} className="text-indigo-600" />
+                </div>
+                <h2 className="text-sm font-black text-indigo-600 uppercase tracking-[0.2em] mb-2">Level {level + 1}</h2>
+                <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">{targetWord}</h3>
+                <p className="text-slate-500 font-medium mb-8">
+                  {level > 0 ? `Last Level Score: ${lastLevelScore}` : "Clear the bubbles to spell the word!"}
+                </p>
+                <button
+                  onClick={() => setShowLevelIntro(false)}
+                  className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-xl shadow-xl shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all"
+                >
+                  Let's Go!
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {isGameOver && (

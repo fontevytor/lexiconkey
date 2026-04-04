@@ -41,6 +41,8 @@ type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | '
 type ActivityType = 'flashcards' | 'bubble' | 'hangman' | 'scramble' | 'piano';
 type DeviceType = 'mobile' | 'tablet' | 'desktop';
 
+import WordOfTheDay from './components/WordOfTheDay';
+
 export default function App() {
   const { 
     isLessonUnlocked, 
@@ -52,6 +54,7 @@ export default function App() {
     currentUser,
     setCurrentUser,
     userProgress,
+    studentActivity,
     customLessons,
     initialized,
     initFirestore,
@@ -191,7 +194,7 @@ export default function App() {
       case 'flashcards': return <Flashcards {...props} onComplete={() => { completeActivity(selectedLesson.id, 'flashcards'); setView('lesson-detail'); }} />;
       case 'bubble': return <BubbleGame {...props} onComplete={() => { completeActivity(selectedLesson.id, 'bubble'); setView('lesson-detail'); }} />;
       case 'hangman': return <Hangman {...props} onComplete={() => { completeActivity(selectedLesson.id, 'hangman'); setView('lesson-detail'); }} />;
-      case 'scramble': return <WordScramble vocabulary={selectedLesson.vocabulary} onComplete={() => { completeActivity(selectedLesson.id, 'scramble'); }} onClose={() => setView('lesson-detail')} />;
+      case 'scramble': return <WordScramble lesson={selectedLesson} onComplete={() => { completeActivity(selectedLesson.id, 'scramble'); setView('lesson-detail'); }} onClose={() => setView('lesson-detail')} />;
       case 'piano': return <PianoFail {...props} onComplete={() => { completeActivity(selectedLesson.id, 'piano'); setView('lesson-detail'); }} />;
       default: return null;
     }
@@ -384,6 +387,8 @@ export default function App() {
               </div>
             </header>
 
+            <WordOfTheDay />
+
             <div className={cn(
               "grid gap-6",
               deviceType === 'mobile' ? "grid-cols-1" : deviceType === 'tablet' ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
@@ -502,7 +507,7 @@ export default function App() {
                 title="Flashcards" 
                 desc="Practice vocabulary with flips" 
                 icon={<BookOpen className="text-rose-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.flashcards : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.flashcards : false}
                 onClick={() => handleActivitySelect('flashcards')}
                 color="bg-rose-50"
               />
@@ -510,33 +515,37 @@ export default function App() {
                 title="Bubble Shooter" 
                 desc="Shoot letters to form words" 
                 icon={<Target className="text-sky-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.bubble : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.bubble : false}
                 onClick={() => handleActivitySelect('bubble')}
                 color="bg-sky-50"
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.bubble?.level : undefined}
               />
               <ActivityCard 
                 title="Hangman" 
                 desc="Guess the word before it's too late" 
                 icon={<Gamepad2 className="text-emerald-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.hangman : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.hangman : false}
                 onClick={() => handleActivitySelect('hangman')}
                 color="bg-emerald-50"
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.hangman?.level : undefined}
               />
               <ActivityCard 
                 title="Word Scramble" 
                 desc="Unscramble letters to form words" 
                 icon={<Keyboard className="text-indigo-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.scramble : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.scramble : false}
                 onClick={() => handleActivitySelect('scramble')}
                 color="bg-indigo-50"
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.scramble?.level : undefined}
               />
               <ActivityCard 
                 title="Piano Fail" 
                 desc="Musical phrase reconstruction" 
                 icon={<Music className="text-violet-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.piano : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.piano : false}
                 onClick={() => handleActivitySelect('piano')}
                 color="bg-violet-50"
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.piano?.level : undefined}
               />
               <div className="md:col-span-2">
                 <ActivityCard 
@@ -584,13 +593,14 @@ export default function App() {
   );
 }
 
-function ActivityCard({ title, desc, icon, completed, onClick, color }: { 
+function ActivityCard({ title, desc, icon, completed, onClick, color, progress }: { 
   title: string, 
   desc: string, 
   icon: React.ReactNode, 
   completed?: boolean,
   onClick: () => void,
-  color: string
+  color: string,
+  progress?: number
 }) {
   return (
     <motion.button
@@ -603,7 +613,14 @@ function ActivityCard({ title, desc, icon, completed, onClick, color }: {
         {React.cloneElement(icon as React.ReactElement, { size: 28 })}
       </div>
       <div className="flex-1">
-        <h4 className="text-2xl font-black text-slate-900 mb-1">{title}</h4>
+        <div className="flex items-center gap-2 mb-1">
+          <h4 className="text-2xl font-black text-slate-900">{title}</h4>
+          {progress !== undefined && !completed && (
+            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 text-[10px] font-black rounded-full uppercase tracking-wider">
+              Lvl {progress + 1}
+            </span>
+          )}
+        </div>
         <p className="text-sm font-medium text-slate-600">{desc}</p>
       </div>
       {completed && (

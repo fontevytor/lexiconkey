@@ -4,21 +4,36 @@ import { Star, ArrowLeft, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import confetti from 'canvas-confetti';
 import { Vocabulary } from '../data/lessons';
 
+import { LessonData } from '../data/lessons';
+import { useAppStore } from '../store/useAppStore';
+
 interface WordScrambleProps {
-  vocabulary: Vocabulary[];
+  lesson: LessonData;
   onComplete: () => void;
   onClose: () => void;
 }
 
-export const WordScramble: React.FC<WordScrambleProps> = ({ vocabulary, onComplete, onClose }) => {
+export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, onClose }) => {
+  const { currentUser, studentActivity, updateGameProgress, completeActivity } = useAppStore();
   const [level, setLevel] = useState(0);
   const [userInput, setUserInput] = useState<string[]>([]);
   const [shuffledLetters, setShuffledLetters] = useState<string[]>([]);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  const vocabulary = lesson.vocabulary;
   const currentWord = vocabulary[level % vocabulary.length];
   const targetWord = currentWord.word.toUpperCase();
+
+  useEffect(() => {
+    // Load progress
+    if (currentUser) {
+      const progress = studentActivity[currentUser]?.gameProgress?.[lesson.id]?.scramble;
+      if (progress) {
+        setLevel(progress.level);
+      }
+    }
+  }, [currentUser, lesson.id]);
 
   useEffect(() => {
     const letters = targetWord.split('');
@@ -44,10 +59,13 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ vocabulary, onComple
         if (level === 9) {
           confetti();
           setShowSuccess(true);
+          completeActivity(lesson.id, 'scramble');
           onComplete();
         } else {
+          const nextLevel = level + 1;
+          updateGameProgress(lesson.id, 'scramble', { level: nextLevel, score: 0 });
           setTimeout(() => {
-            setLevel(prev => prev + 1);
+            setLevel(nextLevel);
           }, 1000);
         }
       } else {

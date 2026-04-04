@@ -13,13 +13,13 @@ interface PianoFailProps {
 }
 
 export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps) {
+  const { currentUser, studentActivity, updateGameProgress, completeActivity } = useAppStore();
   const [level, setLevel] = useState(0);
   const [targetPhrase, setTargetPhrase] = useState('');
   const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState(0);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const { completeActivity } = useAppStore();
 
   const startLevel = (lvl: number) => {
     if (!lesson.phrases[lvl % lesson.phrases.length]) return;
@@ -30,8 +30,17 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
   };
 
   useEffect(() => {
-    startLevel(0);
-  }, [lesson]);
+    // Load progress
+    if (currentUser) {
+      const progress = studentActivity[currentUser]?.gameProgress?.[lesson.id]?.piano;
+      if (progress) {
+        setLevel(progress.level);
+        startLevel(progress.level);
+      } else {
+        startLevel(0);
+      }
+    }
+  }, [currentUser, lesson.id]);
 
   const playNote = (key: string) => {
     try {
@@ -121,13 +130,15 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
           completeActivity(lesson.id, 'piano');
           setTimeout(onComplete, 2000);
         } else {
-          setLevel(level + 1);
-          startLevel(level + 1);
+          const nextLevel = level + 1;
+          updateGameProgress(lesson.id, 'piano', { level: nextLevel, score: 0 });
+          setLevel(nextLevel);
+          startLevel(nextLevel);
         }
       };
       finishLevel();
     }
-  }, [isWon, targetPhrase, showSuccess, level, lesson.id, onComplete, completeActivity]);
+  }, [isWon, targetPhrase, showSuccess, level, lesson.id, onComplete, completeActivity, updateGameProgress]);
 
   useEffect(() => {
     if (mistakes >= 6) {
