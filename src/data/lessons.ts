@@ -1,6 +1,7 @@
 export interface Vocabulary {
   word: string;
   translation: string;
+  type?: 'noun' | 'verb' | 'adjective' | 'other';
 }
 
 export interface AssignmentQuestion {
@@ -14,6 +15,7 @@ export interface LessonData {
   vocabulary: Vocabulary[];
   phrases: string[];
   assignments?: AssignmentQuestion[];
+  verbs?: Vocabulary[];
 }
 
 const DEFAULT_ASSIGNMENTS: AssignmentQuestion[] = Array.from({ length: 10 }, (_, i) => ({
@@ -26,16 +28,21 @@ export const LESSONS: LessonData[] = [
     id: 1,
     title: "Fruits & Basics",
     vocabulary: [
-      { word: "MANGO", translation: "Manga" },
-      { word: "APPLE", translation: "Maçã" },
-      { word: "BANANA", translation: "Banana" },
-      { word: "ORANGE", translation: "Laranja" },
-      { word: "GRAPE", translation: "Uva" },
-      { word: "WATERMELON", translation: "Melancia" },
-      { word: "PINEAPPLE", translation: "Abacaxi" },
-      { word: "STRAWBERRY", translation: "Morango" },
-      { word: "PEACH", translation: "Pêssego" },
-      { word: "CHERRY", translation: "Cereja" },
+      { word: "MANGO", translation: "Manga", type: 'noun' },
+      { word: "APPLE", translation: "Maçã", type: 'noun' },
+      { word: "BANANA", translation: "Banana", type: 'noun' },
+      { word: "ORANGE", translation: "Laranja", type: 'noun' },
+      { word: "GRAPE", translation: "Uva", type: 'noun' },
+      { word: "WATERMELON", translation: "Melancia", type: 'noun' },
+      { word: "PINEAPPLE", translation: "Abacaxi", type: 'noun' },
+      { word: "STRAWBERRY", translation: "Morango", type: 'noun' },
+      { word: "PEACH", translation: "Pêssego", type: 'noun' },
+      { word: "CHERRY", translation: "Cereja", type: 'noun' },
+    ],
+    verbs: [
+      { word: "EAT", translation: "Comer", type: 'verb' },
+      { word: "DRINK", translation: "Beber", type: 'verb' },
+      { word: "COOK", translation: "Cozinhar", type: 'verb' },
     ],
     phrases: [
       "I LIKE TO EAT MANGO",

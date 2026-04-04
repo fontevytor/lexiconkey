@@ -1,0 +1,188 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ChevronLeft, Check, X, Star, Zap } from 'lucide-react';
+import { LessonData, Vocabulary } from '../data/lessons';
+import { useAppStore } from '../store/useAppStore';
+import { cn } from '../lib/utils';
+import confetti from 'canvas-confetti';
+
+interface LessonVerbsProps {
+  lesson: LessonData;
+  onComplete: () => void;
+  onBack: () => void;
+}
+
+export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsProps) {
+  const [pool, setPool] = useState<Vocabulary[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
+  const { currentUser, updateVocabStats, toggleFavoriteCard, favoriteCards } = useAppStore();
+
+  const verbs = lesson.verbs || [];
+
+  useEffect(() => {
+    if (verbs.length > 0) {
+      setPool([...verbs].sort(() => Math.random() - 0.5));
+    }
+  }, [lesson]);
+
+  const handleFlip = () => setIsFlipped(!isFlipped);
+
+  const handleDifficulty = (level: number) => {
+    if (pool[currentIndex]) {
+      updateVocabStats(pool[currentIndex].word, { difficulty: level });
+    }
+  };
+
+  const handleResponse = (ok: boolean) => {
+    if (ok) {
+      const newCompleted = completedCount + 1;
+      setCompletedCount(newCompleted);
+      if (newCompleted === pool.length) {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        setTimeout(onComplete, 1500);
+      } else {
+        setIsFlipped(false);
+        setCurrentIndex(currentIndex + 1);
+      }
+    } else {
+      const newPool = [...pool];
+      const currentCard = newPool.splice(currentIndex, 1)[0];
+      const randomPos = Math.floor(Math.random() * (newPool.length - currentIndex)) + currentIndex;
+      newPool.splice(randomPos, 0, currentCard);
+      
+      setIsFlipped(false);
+      setPool(newPool);
+    }
+  };
+
+  if (verbs.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+        <Zap size={64} className="text-slate-200 mb-4" />
+        <h3 className="text-2xl font-black text-slate-900 mb-2">No verbs yet!</h3>
+        <p className="text-slate-500 font-medium mb-8 text-lg">Ask your teacher to add some verbs to this lesson.</p>
+        <button onClick={onBack} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  if (pool.length === 0 || currentIndex >= pool.length) return null;
+
+  const currentCard = pool[currentIndex];
+  const isFavorite = currentUser && currentCard ? (favoriteCards[currentUser] || []).includes(currentCard.word) : false;
+  const progress = (completedCount / pool.length) * 100;
+
+  return (
+    <div className="h-full flex flex-col p-6 max-w-2xl mx-auto bg-indigo-50/30 backdrop-blur-xl">
+      <div className="flex justify-between items-center mb-12">
+        <button onClick={onBack} className="p-2 hover:bg-white rounded-full transition-colors text-slate-700 shadow-sm border border-slate-200">
+          <ChevronLeft size={24} />
+        </button>
+        <div className="flex-1 mx-8 text-center">
+          <h2 className="text-sm font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
+            <Zap size={16} /> Verb Session
+          </h2>
+          <div className="h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner border border-slate-100">
+            <motion.div 
+              className="h-full bg-indigo-600"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+        <span className="text-sm font-black text-slate-900">
+          {completedCount}/{pool.length}
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center gap-12">
+        <div className="relative w-full aspect-[4/3] perspective-1000">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentCard.word + currentIndex}
+              initial={{ y: 50, opacity: 0, rotateX: -10 }}
+              animate={{ y: 0, opacity: 1, rotateX: 0 }}
+              exit={{ y: -50, opacity: 0, rotateX: 10 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+              className="w-full h-full cursor-pointer preserve-3d"
+              onClick={handleFlip}
+            >
+              <motion.div
+                className="w-full h-full relative preserve-3d transition-all duration-500"
+                animate={{ rotateY: isFlipped ? 180 : 0 }}
+              >
+                <div className="absolute inset-0 backface-hidden bg-white border-4 border-indigo-100 rounded-[3rem] flex flex-col items-center justify-center p-8 shadow-2xl">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); toggleFavoriteCard(currentCard.word); }}
+                    className={cn(
+                      "absolute top-8 right-8 p-3 rounded-2xl transition-all",
+                      isFavorite ? "bg-amber-100 text-amber-500" : "bg-slate-50 text-slate-300 hover:text-slate-400"
+                    )}
+                  >
+                    <Star size={24} fill={isFavorite ? "currentColor" : "none"} />
+                  </button>
+                  <div className="px-4 py-1 bg-indigo-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest mb-6">
+                    Verb
+                  </div>
+                  <h2 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tight text-center">
+                    {currentCard.word}
+                  </h2>
+                  <p className="absolute bottom-8 text-slate-400 text-xs font-black uppercase tracking-widest">Click to flip</p>
+                </div>
+
+                <div 
+                  className="absolute inset-0 backface-hidden bg-indigo-600 border-4 border-indigo-400 rounded-[3rem] flex flex-col items-center justify-center p-8 shadow-2xl"
+                  style={{ transform: 'rotateY(180deg)' }}
+                >
+                  <h2 className="text-5xl md:text-7xl font-black text-white tracking-tight text-center mb-8">
+                    {currentCard.translation}
+                  </h2>
+                  
+                  <div className="w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-indigo-200 text-xs font-black uppercase tracking-widest text-center mb-3">Rate Difficulty (0-10)</p>
+                    <div className="flex flex-wrap justify-center gap-1.5">
+                      {[...Array(11)].map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleDifficulty(i)}
+                          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/30 text-white text-[10px] font-black transition-colors border border-white/20"
+                        >
+                          {i}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <div className="flex gap-6 w-full">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleResponse(false); }}
+            className="flex-1 flex items-center justify-center gap-2 py-5 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border-2 border-slate-200 hover:border-rose-200 rounded-2xl transition-all font-black text-lg shadow-sm"
+          >
+            <X size={24} />
+            Not Okay
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleResponse(true); }}
+            className="flex-1 flex items-center justify-center gap-2 py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl transition-all font-black text-lg shadow-xl shadow-indigo-500/20"
+          >
+            <Check size={24} />
+            Okay
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

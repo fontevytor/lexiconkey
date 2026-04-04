@@ -18,7 +18,11 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
   useEffect(() => {
     if (currentUser) {
       const favorites = favoriteCards[currentUser] || [];
-      const allVocab = customLessons.flatMap(l => l.vocabulary);
+      const allVocab = customLessons.flatMap(l => {
+        const vocab = l.vocabulary;
+        const verbs = l.verbs || [];
+        return [...vocab, ...verbs];
+      });
       const filtered = allVocab.filter(v => favorites.includes(v.word));
       // Remove duplicates if any
       const unique = Array.from(new Map(filtered.map(v => [v.word, v])).values());

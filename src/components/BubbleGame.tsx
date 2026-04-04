@@ -36,7 +36,7 @@ interface Particle {
 }
 
 const BUBBLE_RADIUS = 18;
-const PROJECTILE_RADIUS = 8;
+const PROJECTILE_RADIUS = 9;
 const COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 const COLOR_NAMES = ['red', 'blue', 'green', 'yellow', 'purple', 'pink'];
 
@@ -326,8 +326,8 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
       
       if (dy < 0) {
         ctx.setLineDash([8, 4]);
-        ctx.strokeStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.8)' : 'rgba(79, 70, 229, 0.7)';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 1)' : 'rgba(79, 70, 229, 0.9)';
+        ctx.lineWidth = 6;
         ctx.beginPath();
         ctx.moveTo(dragStart.x, dragStart.y);
         
@@ -343,8 +343,8 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
           
           if (i % 3 === 0) {
             ctx.beginPath();
-            ctx.arc(tx, ty, 3, 0, Math.PI * 2);
-            ctx.fillStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.7)' : 'rgba(79, 70, 229, 0.6)';
+            ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+            ctx.fillStyle = currentLetterIndex === powerUpIndex ? 'rgba(234, 179, 8, 0.9)' : 'rgba(79, 70, 229, 0.8)';
             ctx.fill();
           }
           
@@ -405,6 +405,39 @@ export default function BubbleGame({ lesson, onComplete, onBack }: BubbleGamePro
             toExplode.push(otherBubbles[idx].id);
           }
           setScore(s => s + toExplode.length * 75);
+        } else if (hitBubble.isAddRow) {
+          // Add Row: add 2 rows + the add row bubble itself disappears
+          setShake(5);
+          toExplode.push(hitBubble.id);
+          setScore(s => s + 200);
+          
+          // Trigger new rows logic (same as miss but beneficial)
+          setTimeout(() => {
+            setBubbles(prev => {
+              const shifted = prev.map(b => ({ ...b, y: b.y + BUBBLE_RADIUS * 1.7 * 2, row: b.row + 2 }));
+              const newRows: Bubble[] = [];
+              const cols = 14;
+              for (let r = 0; r < 2; r++) {
+                for (let c = 0; c < cols; c++) {
+                  const offset = ((prev.length + r) % 2 === 0 ? 0 : BUBBLE_RADIUS);
+                  const x = c * BUBBLE_RADIUS * 2 + BUBBLE_RADIUS + offset;
+                  if (x > 500 - BUBBLE_RADIUS) continue;
+                  const isBomb = Math.random() < 0.05;
+                  newRows.push({
+                    id: `new-bonus-${Date.now()}-${r}-${c}`,
+                    x,
+                    y: BUBBLE_RADIUS + (r * BUBBLE_RADIUS * 1.7),
+                    color: isBomb ? '#334155' : COLORS[Math.floor(Math.random() * COLORS.length)],
+                    radius: BUBBLE_RADIUS,
+                    row: r,
+                    col: c,
+                    isBomb
+                  });
+                }
+              }
+              return [...shifted, ...newRows];
+            });
+          }, 100);
         } else if (hitBubble.color === shootingBubble.color) {
           // Connected same color logic
           const connected: string[] = [];

@@ -38,8 +38,9 @@ import GeneralKnowledge from './components/GeneralKnowledge';
 import TeacherDashboard from './components/TeacherDashboard';
 import { Assignment } from './components/Assignment';
 import GeneralCards from './components/GeneralCards';
+import LessonVerbs from './components/LessonVerbs';
 
-type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher' | 'general-cards';
+type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher' | 'general-cards' | 'verbs';
 type ActivityType = 'flashcards' | 'bubble' | 'hangman' | 'scramble' | 'piano';
 type DeviceType = 'mobile' | 'tablet' | 'desktop';
 
@@ -602,6 +603,13 @@ export default function App() {
                 color="bg-violet-50"
                 progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.piano?.level : undefined}
               />
+              <ActivityCard 
+                title="Verb Session" 
+                desc="Master lesson verbs" 
+                icon={<Zap className="text-indigo-600" />}
+                onClick={() => setView('verbs')}
+                color="bg-indigo-50"
+              />
               <div className="md:col-span-2">
                 <ActivityCard 
                   title="Extra Assignment" 
@@ -642,6 +650,14 @@ export default function App() {
 
         {view === 'general-cards' && (
           <GeneralCards onBack={() => setView('home')} />
+        )}
+
+        {view === 'verbs' && selectedLesson && (
+          <LessonVerbs 
+            lesson={selectedLesson} 
+            onComplete={() => setView('lesson-detail')}
+            onBack={() => setView('lesson-detail')}
+          />
         )}
       </AnimatePresence>
     </div>

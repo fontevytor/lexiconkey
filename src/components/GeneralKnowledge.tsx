@@ -29,24 +29,39 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
   const [noteText, setNoteText] = useState('');
   const [noteAnswer, setNoteAnswer] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'english' | 'portuguese' | 'lesson' | 'practice'>('english');
+  const [sortBy, setSortBy] = useState<'english' | 'portuguese' | 'lesson' | 'practice' | 'views'>('english');
+  const [filterType, setFilterType] = useState<'all' | 'verbs'>('all');
+  const [filterRating, setFilterRating] = useState<number | 'all'>('all');
 
   const currentUserNotes = (currentUser && userNotes[currentUser]) || {};
   const currentUserStats = (currentUser && userStats[currentUser]) || {};
 
   const unlockedVocabulary = LESSONS
     .filter(lesson => isLessonUnlocked(lesson.id))
-    .flatMap(lesson => lesson.vocabulary.map(v => ({ ...v, lessonId: lesson.id })));
+    .flatMap(lesson => {
+      const vocab = lesson.vocabulary.map(v => ({ ...v, lessonId: lesson.id }));
+      const verbs = (lesson.verbs || []).map(v => ({ ...v, lessonId: lesson.id, isVerb: true }));
+      return [...vocab, ...verbs];
+    });
 
   const filteredVocab = unlockedVocabulary
-    .filter(v => 
-      v.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      v.translation.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(v => {
+      const matchesSearch = v.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           v.translation.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesType = filterType === 'all' || (filterType === 'verbs' && (v.type === 'verb' || (v as any).isVerb));
+      const stats = currentUserStats[v.word] || { difficulty: 0, viewCount: 0 };
+      const matchesRating = filterRating === 'all' || stats.difficulty === filterRating;
+      
+      return matchesSearch && matchesType && matchesRating;
+    })
     .sort((a, b) => {
+      const statsA = currentUserStats[a.word] || { difficulty: 0, viewCount: 0 };
+      const statsB = currentUserStats[b.word] || { difficulty: 0, viewCount: 0 };
+
       if (sortBy === 'english') return a.word.localeCompare(b.word);
       if (sortBy === 'portuguese') return a.translation.localeCompare(b.translation);
       if (sortBy === 'lesson') return a.lessonId - b.lessonId;
+      if (sortBy === 'views') return statsB.viewCount - statsA.viewCount;
       if (sortBy === 'practice') {
         const countA = currentUserNotes[a.word]?.length || 0;
         const countB = currentUserNotes[b.word]?.length || 0;
@@ -122,9 +137,33 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col md:flex-row gap-4 flex-wrap">
           <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl px-4 py-2">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sort by:</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Type:</span>
+            <select 
+              value={filterType} 
+              onChange={(e) => setFilterType(e.target.value as any)}
+              className="bg-transparent text-sm font-black text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Words</option>
+              <option value="verbs">Verbs Only</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl px-4 py-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rating:</span>
+            <select 
+              value={filterRating} 
+              onChange={(e) => setFilterRating(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="bg-transparent text-sm font-black text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Ratings</option>
+              {[...Array(11)].map((_, i) => (
+                <option key={i} value={i}>{i}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl px-4 py-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sort:</span>
             <select 
               value={sortBy} 
               onChange={(e) => setSortBy(e.target.value as any)}
@@ -133,6 +172,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
               <option value="english">English A-Z</option>
               <option value="portuguese">Portuguese A-Z</option>
               <option value="lesson">Lesson Number</option>
+              <option value="views">Most Viewed</option>
               <option value="practice">Custom Practice Count</option>
             </select>
           </div>
@@ -143,7 +183,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
               placeholder="Search vocabulary..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-indigo-500 transition-all w-full md:w-72 shadow-sm font-medium"
+              className="pl-10 pr-4 py-3 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-indigo-500 transition-all w-full md:w-64 shadow-sm font-medium"
             />
           </div>
         </div>
@@ -153,6 +193,12 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredVocab.map((item, i) => {
             const stats = currentUserStats[item.word] || { difficulty: 0, viewCount: 0 };
+            const isVerb = item.type === 'verb' || (item as any).isVerb;
+            
+            // Background color based on difficulty: 0 (green) to 10 (red)
+            const hue = 140 - (stats.difficulty * 14);
+            const bgColor = `hsl(${hue}, 100%, 97%)`;
+
             return (
               <motion.button
                 key={i}
@@ -160,32 +206,35 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.01 }}
                 onClick={() => handleWordSelect(item)}
-                className="p-6 bg-white border-2 border-slate-200 rounded-[2rem] hover:border-indigo-500 transition-all group shadow-sm hover:shadow-xl text-left relative overflow-hidden"
+                style={{ backgroundColor: bgColor }}
+                className={cn(
+                  "p-6 border-2 rounded-[2rem] hover:border-indigo-500 transition-all group shadow-sm hover:shadow-xl text-left relative overflow-hidden",
+                  isVerb ? "border-indigo-400 border-dashed" : "border-slate-200"
+                )}
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-indigo-50 text-[10px] font-black text-indigo-600 rounded-lg uppercase tracking-wider border border-indigo-100">
+                    <span className="px-3 py-1 bg-white/80 backdrop-blur-sm text-[10px] font-black text-slate-600 rounded-lg uppercase tracking-wider border border-slate-100">
                       Lesson {item.lessonId}
                     </span>
-                    <div className="flex items-center gap-1 text-slate-300 font-black text-[10px]">
+                    {isVerb && (
+                      <span className="px-3 py-1 bg-indigo-600 text-[10px] font-black text-white rounded-lg uppercase tracking-wider">
+                        Verb
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-slate-400 font-black text-[10px]">
                       <Search size={10} />
                       {stats.viewCount}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
                     {stats.difficulty > 0 && (
                       <span className={cn(
-                        "text-[10px] font-black px-2 py-0.5 rounded-md",
-                        stats.difficulty > 7 ? "bg-rose-50 text-rose-600" : stats.difficulty > 4 ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+                        "text-[10px] font-black px-2 py-0.5 rounded-md bg-white/80",
+                        stats.difficulty > 7 ? "text-rose-600" : stats.difficulty > 4 ? "text-amber-600" : "text-emerald-600"
                       )}>
                         D: {stats.difficulty}
                       </span>
-                    )}
-                    {currentUserNotes[item.word]?.length > 0 && (
-                      <div className="flex items-center gap-1 text-indigo-600 font-black text-xs">
-                        <MessageSquare size={12} />
-                        {currentUserNotes[item.word].length}
-                      </div>
                     )}
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Save, Plus, Trash2, Edit2, CheckCircle2, Users, BookOpen as BookIcon, UserPlus, X, Brain, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { ChevronLeft, Save, Plus, Trash2, Edit2, CheckCircle2, Users, BookOpen as BookIcon, UserPlus, X, Brain, ChevronUp, ChevronDown, GripVertical, Zap } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { LessonData, Vocabulary } from '../data/lessons';
 import { cn } from '../lib/utils';
@@ -72,6 +72,25 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     if (!selectedLesson) return;
     const newAssignments = (selectedLesson.assignments || []).filter((_, i) => i !== index);
     updateLesson(selectedLesson.id, { assignments: newAssignments });
+  };
+
+  const handleUpdateVerb = (index: number, updates: Partial<Vocabulary>) => {
+    if (!selectedLesson) return;
+    const newVerbs = [...(selectedLesson.verbs || [])];
+    newVerbs[index] = { ...newVerbs[index], ...updates };
+    updateLesson(selectedLesson.id, { verbs: newVerbs });
+  };
+
+  const handleAddVerb = () => {
+    if (!selectedLesson) return;
+    const newVerbs = [...(selectedLesson.verbs || []), { word: 'NEW VERB', translation: 'Tradução', type: 'verb' as const }];
+    updateLesson(selectedLesson.id, { verbs: newVerbs });
+  };
+
+  const handleRemoveVerb = (index: number) => {
+    if (!selectedLesson) return;
+    const newVerbs = (selectedLesson.verbs || []).filter((_, i) => i !== index);
+    updateLesson(selectedLesson.id, { verbs: newVerbs });
   };
 
   const handleAddLesson = () => {
@@ -254,6 +273,77 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* Verbs Editor */}
+                <div className="bg-white rounded-[3rem] border-2 border-slate-100 p-8 shadow-sm">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
+                        <Zap size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Lesson Verbs</h2>
+                        <p className="text-slate-500 font-medium">Add verbs for the dedicated verb session.</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={handleAddVerb}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-2xl font-black hover:bg-indigo-100 transition-all"
+                    >
+                      <Plus size={20} /> Add Verb
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {(selectedLesson.verbs || []).map((verb, index) => (
+                      <div key={index} className="p-6 bg-slate-50 rounded-3xl border-2 border-transparent hover:border-slate-200 transition-all group">
+                        <div className="flex flex-col md:flex-row gap-6">
+                          <div className="flex-1 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Verb (English)</label>
+                                <input 
+                                  type="text"
+                                  value={verb.word}
+                                  onChange={(e) => handleUpdateVerb(index, { word: e.target.value.toUpperCase() })}
+                                  className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl font-black text-slate-800 focus:border-indigo-500 outline-none transition-all"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Translation</label>
+                                <input 
+                                  type="text"
+                                  value={verb.translation}
+                                  onChange={(e) => handleUpdateVerb(index, { translation: e.target.value })}
+                                  className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl font-black text-slate-800 focus:border-indigo-500 outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex md:flex-col justify-end gap-2">
+                            <button 
+                              onClick={() => handleRemoveVerb(index)}
+                              className="p-3 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(selectedLesson.verbs || []).length === 0 && (
+                      <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400">
+                        <p className="font-bold">No verbs added yet.</p>
+                        <button 
+                          onClick={handleAddVerb}
+                          className="mt-4 text-indigo-600 font-black hover:underline"
+                        >
+                          Add your first verb
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 

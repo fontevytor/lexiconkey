@@ -11,8 +11,10 @@ export default function WordOfTheDay() {
   const [status, setStatus] = useState<'idle' | 'correct' | 'wrong'>('idle');
 
   useEffect(() => {
-    getWordOfTheDay();
-  }, [getWordOfTheDay]);
+    if (currentUser && !wordOfTheDay[currentUser]) {
+      getWordOfTheDay();
+    }
+  }, [getWordOfTheDay, currentUser, wordOfTheDay]);
 
   const currentWotd = currentUser ? wordOfTheDay[currentUser] : null;
   const currentScore = currentUser ? (memoryMasterScore[currentUser] || 0) : 0;
