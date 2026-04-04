@@ -3,12 +3,23 @@ export interface Vocabulary {
   translation: string;
 }
 
+export interface AssignmentQuestion {
+  question: string;
+  answer: string;
+}
+
 export interface LessonData {
   id: number;
   title: string;
   vocabulary: Vocabulary[];
   phrases: string[];
+  assignments?: AssignmentQuestion[];
 }
+
+const DEFAULT_ASSIGNMENTS: AssignmentQuestion[] = Array.from({ length: 10 }, (_, i) => ({
+  question: `Extra Question ${i + 1}`,
+  answer: `Answer ${i + 1}`,
+}));
 
 export const LESSONS: LessonData[] = [
   {
@@ -38,6 +49,7 @@ export const LESSONS: LessonData[] = [
       "THE PEACH IS SOFT",
       "CHERRY ON TOP",
     ],
+    assignments: DEFAULT_ASSIGNMENTS,
   },
   {
     id: 2,
@@ -66,6 +78,7 @@ export const LESSONS: LessonData[] = [
       "ORANGE IS A FRUIT AND COLOR",
       "PINK FLOWERS ARE PRETTY",
     ],
+    assignments: DEFAULT_ASSIGNMENTS,
   },
   ...Array.from({ length: 28 }, (_, i) => ({
     id: i + 3,
@@ -78,5 +91,6 @@ export const LESSONS: LessonData[] = [
       `PHRASE FOR LESSON ${i + 3} ONE`,
       `PHRASE FOR LESSON ${i + 3} TWO`,
     ],
+    assignments: DEFAULT_ASSIGNMENTS,
   }))
 ];

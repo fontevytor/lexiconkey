@@ -13,9 +13,61 @@ import {
   where,
   updateDoc,
   getDoc,
-  collectionGroup
+  collectionGroup,
+  getDocFromServer
 } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  // Don't throw here to avoid crashing the whole app, but log it clearly
+}
 
 interface CustomNote {
   id: string;
@@ -29,10 +81,11 @@ interface LessonProgress {
     flashcards: boolean;
     bubble: boolean;
     hangman: boolean;
-    battleship: boolean;
+    scramble: boolean;
     piano: boolean;
   };
   unlocked: boolean;
+  assignmentCompleted?: boolean;
 }
 
 interface VocabularyStats {
@@ -54,7 +107,6 @@ interface StudentActivity {
 interface AppState {
   userType: 'student' | 'teacher' | null;
   currentUser: string | null; // username or 'teacher'
-  studentAccounts: StudentAccount[];
   studentActivity: Record<string, StudentActivity>; // Key is username
   userProgress: Record<string, Record<number, LessonProgress>>; // Key is username
   userNotes: Record<string, Record<string, CustomNote[]>>; // Key 1: username, Key 2: word
@@ -64,10 +116,9 @@ interface AppState {
   initialized: boolean;
   setUserType: (type: 'student' | 'teacher' | null) => void;
   setCurrentUser: (username: string | null) => void;
-  addStudent: (student: StudentAccount) => Promise<void>;
-  deleteStudent: (username: string) => Promise<void>;
   updateStudentActivity: (username: string, activity: Partial<StudentActivity>) => Promise<void>;
   completeActivity: (lessonId: number, activity: keyof LessonProgress['stars']) => Promise<void>;
+  completeAssignment: (lessonId: number) => Promise<void>;
   isLessonUnlocked: (lessonId: number) => boolean;
   getStarsCount: (lessonId: number, username?: string) => number;
   addNote: (word: string, note: Omit<CustomNote, 'id'>) => Promise<void>;
@@ -105,127 +156,102 @@ export const useAppStore = create<AppState>()(
 
         const unsubscribers: (() => void)[] = [];
 
+        // Test connection
+        getDocFromServer(doc(db, 'test', 'connection')).catch(err => {
+          if (err.message.includes('the client is offline')) {
+            console.error("Firebase is offline. Check configuration.");
+          }
+        });
+
         // Listen for auth state changes
         const authUnsub = onAuthStateChanged(auth, (user) => {
-          // If we have a user, we might need to re-sync or just update state
-          // But we don't trigger syncUserData here, App.tsx handles it
           set({ initialized: true });
         });
         unsubscribers.push(authUnsub);
 
-        // Sync Student Accounts (Publicly readable per rules)
-        unsubscribers.push(onSnapshot(collection(db, 'studentAccounts'), (snapshot) => {
-          const accounts: StudentAccount[] = [];
-          snapshot.forEach(doc => accounts.push(doc.data() as StudentAccount));
-          set({ studentAccounts: accounts });
-        }));
-
         // Sync Lessons (Publicly readable per rules)
         unsubscribers.push(onSnapshot(collection(db, 'lessons'), (snapshot) => {
           if (snapshot.empty) {
-            LESSONS.forEach(l => setDoc(doc(db, 'lessons', l.id.toString()), l));
+            // Only initialize if we are the teacher
+            if (auth.currentUser?.email === 'fontevytor@gmail.com') {
+              LESSONS.forEach(l => setDoc(doc(db, 'lessons', l.id.toString()), l).catch(err => {
+                handleFirestoreError(err, OperationType.WRITE, `lessons/${l.id}`);
+              }));
+            }
           } else {
             const lessons: LessonData[] = [];
             snapshot.forEach(doc => lessons.push(doc.data() as LessonData));
             set({ customLessons: lessons.sort((a, b) => a.id - b.id) });
           }
-        }));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'lessons')));
 
         return () => unsubscribers.forEach(unsub => unsub());
       },
 
       syncUserData: (username, isTeacher) => {
+        if (!isTeacher) return () => {}; // Students are local-only now
+
         const unsubscribers: (() => void)[] = [];
 
         // Helper to wait for auth if needed
         const startSync = () => {
           if (!auth.currentUser) return;
 
-          if (isTeacher) {
-            // Teacher syncs everything
-            unsubscribers.push(onSnapshot(collection(db, 'studentActivity'), (snapshot) => {
-              const activity: Record<string, StudentActivity> = {};
-              snapshot.forEach(doc => activity[doc.id] = doc.data() as StudentActivity);
-              set({ studentActivity: activity });
-            }));
+          // Teacher syncs everything
+          unsubscribers.push(onSnapshot(collection(db, 'studentActivity'), (snapshot) => {
+            const activity: Record<string, StudentActivity> = {};
+            snapshot.forEach(doc => activity[doc.id] = doc.data() as StudentActivity);
+            set({ studentActivity: activity });
+          }, (err) => handleFirestoreError(err, OperationType.LIST, 'studentActivity')));
 
-            unsubscribers.push(onSnapshot(collection(db, 'userProgress'), (snapshot) => {
-              snapshot.forEach(async (userDoc) => {
-                const uname = userDoc.id;
-                const lessonsSnapshot = await getDocs(collection(db, `userProgress/${uname}/lessons`));
-                const progress: Record<number, LessonProgress> = {};
-                lessonsSnapshot.forEach(lDoc => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
-                set(state => ({
-                  userProgress: { ...state.userProgress, [uname]: progress }
-                }));
+          unsubscribers.push(onSnapshot(collection(db, 'userProgress'), (snapshot) => {
+            snapshot.forEach(async (userDoc) => {
+              const uname = userDoc.id;
+              const lessonsSnapshot = await getDocs(collection(db, `userProgress/${uname}/lessons`)).catch(err => {
+                handleFirestoreError(err, OperationType.LIST, `userProgress/${uname}/lessons`);
+                return { forEach: () => {} } as any;
               });
-            }));
-
-            unsubscribers.push(onSnapshot(collection(db, 'userNotes'), (snapshot) => {
-              snapshot.forEach(async (userDoc) => {
-                const uname = userDoc.id;
-                const notesSnapshot = await getDocs(collection(db, `userNotes/${uname}/notes`));
-                const notes: Record<string, CustomNote[]> = {};
-                notesSnapshot.forEach(nDoc => {
-                  const note = nDoc.data() as CustomNote & { word: string };
-                  if (!notes[note.word]) notes[note.word] = [];
-                  notes[note.word].push(note);
-                });
-                set(state => ({
-                  userNotes: { ...state.userNotes, [uname]: notes }
-                }));
-              });
-            }));
-
-            unsubscribers.push(onSnapshot(collection(db, 'userStats'), (snapshot) => {
-              snapshot.forEach(async (userDoc) => {
-                const uname = userDoc.id;
-                const statsSnapshot = await getDocs(collection(db, `userStats/${uname}/words`));
-                const stats: Record<string, VocabularyStats> = {};
-                statsSnapshot.forEach(sDoc => stats[sDoc.id] = sDoc.data() as VocabularyStats);
-                set(state => ({
-                  userStats: { ...state.userStats, [uname]: stats }
-                }));
-              });
-            }));
-          } else {
-            // Student syncs only their own data
-            unsubscribers.push(onSnapshot(doc(db, 'studentActivity', username), (doc) => {
-              if (doc.exists()) {
-                set(state => ({
-                  studentActivity: { ...state.studentActivity, [username]: doc.data() as StudentActivity }
-                }));
-              }
-            }));
-
-            unsubscribers.push(onSnapshot(collection(db, `userProgress/${username}/lessons`), (snapshot) => {
               const progress: Record<number, LessonProgress> = {};
-              snapshot.forEach(lDoc => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
+              lessonsSnapshot.forEach((lDoc: any) => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
               set(state => ({
-                userProgress: { ...state.userProgress, [username]: progress }
+                userProgress: { ...state.userProgress, [uname]: progress }
               }));
-            }));
+            });
+          }, (err) => handleFirestoreError(err, OperationType.LIST, 'userProgress')));
 
-            unsubscribers.push(onSnapshot(collection(db, `userNotes/${username}/notes`), (snapshot) => {
+          unsubscribers.push(onSnapshot(collection(db, 'userNotes'), (snapshot) => {
+            snapshot.forEach(async (userDoc) => {
+              const uname = userDoc.id;
+              const notesSnapshot = await getDocs(collection(db, `userNotes/${uname}/notes`)).catch(err => {
+                handleFirestoreError(err, OperationType.LIST, `userNotes/${uname}/notes`);
+                return { forEach: () => {} } as any;
+              });
               const notes: Record<string, CustomNote[]> = {};
-              snapshot.forEach(nDoc => {
+              notesSnapshot.forEach((nDoc: any) => {
                 const note = nDoc.data() as CustomNote & { word: string };
                 if (!notes[note.word]) notes[note.word] = [];
                 notes[note.word].push(note);
               });
               set(state => ({
-                userNotes: { ...state.userNotes, [username]: notes }
+                userNotes: { ...state.userNotes, [uname]: notes }
               }));
-            }));
+            });
+          }, (err) => handleFirestoreError(err, OperationType.LIST, 'userNotes')));
 
-            unsubscribers.push(onSnapshot(collection(db, `userStats/${username}/words`), (snapshot) => {
+          unsubscribers.push(onSnapshot(collection(db, 'userStats'), (snapshot) => {
+            snapshot.forEach(async (userDoc) => {
+              const uname = userDoc.id;
+              const statsSnapshot = await getDocs(collection(db, `userStats/${uname}/words`)).catch(err => {
+                handleFirestoreError(err, OperationType.LIST, `userStats/${uname}/words`);
+                return { forEach: () => {} } as any;
+              });
               const stats: Record<string, VocabularyStats> = {};
-              snapshot.forEach(sDoc => stats[sDoc.id] = sDoc.data() as VocabularyStats);
+              statsSnapshot.forEach((sDoc: any) => stats[sDoc.id] = sDoc.data() as VocabularyStats);
               set(state => ({
-                userStats: { ...state.userStats, [username]: stats }
+                userStats: { ...state.userStats, [uname]: stats }
               }));
-            }));
-          }
+            });
+          }, (err) => handleFirestoreError(err, OperationType.LIST, 'userStats')));
         };
 
         // If already auth, start immediately
@@ -257,75 +283,91 @@ export const useAppStore = create<AppState>()(
       },
 
       loginAsStudent: async (username) => {
-        try {
-          if (!auth.currentUser) {
-            await signInAnonymously(auth);
-          }
-        } catch (err: any) {
-          if (err.code === 'auth/admin-restricted-operation') {
-            throw new Error('Anonymous authentication is disabled in Firebase Console. Please enable it or contact the administrator.');
-          }
-          throw err;
-        }
-        
-        const uid = auth.currentUser?.uid;
-        if (uid) {
-          await updateDoc(doc(db, 'studentAccounts', username), { uid });
-        }
-        set({ userType: 'student', currentUser: username });
-      },
-
-      addStudent: async (student) => {
-        await setDoc(doc(db, 'studentAccounts', student.username), student);
-      },
-
-      deleteStudent: async (username) => {
-        await deleteDoc(doc(db, 'studentAccounts', username));
-        await deleteDoc(doc(db, 'studentActivity', username));
-        // Note: Deleting subcollections requires more logic, usually done via Cloud Functions or recursive deletes
-        // For now we just delete the main docs
+        set({ userType: 'student', currentUser: username || 'Student' });
       },
 
       updateStudentActivity: async (username, activity) => {
         const current = get().studentActivity[username] || { lessonId: 1, wordIndex: 0, lastSaved: Date.now() };
         const updated = { ...current, ...activity, lastSaved: Date.now() };
-        await setDoc(doc(db, 'studentActivity', username), updated);
+        
+        set(state => ({
+          studentActivity: { ...state.studentActivity, [username]: updated }
+        }));
+
+        if (get().userType === 'teacher') {
+          await setDoc(doc(db, 'studentActivity', username), updated);
+        }
       },
 
       completeActivity: async (lessonId, activity) => {
         const { currentUser } = get();
-        if (!currentUser || currentUser === 'teacher') return;
+        if (!currentUser) return;
 
         const currentProgressMap = get().userProgress[currentUser] || {
           1: {
-            stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
+            stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
             unlocked: true,
           }
         };
         
         const currentProgress = currentProgressMap[lessonId] || {
-          stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
+          stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
           unlocked: lessonId === 1,
         };
 
         const newStars = { ...currentProgress.stars, [activity]: true };
         const newLessonProgress = { ...currentProgress, stars: newStars };
         
-        await setDoc(doc(db, `userProgress/${currentUser}/lessons`, lessonId.toString()), newLessonProgress);
+        const newUserProgress = { ...currentProgressMap, [lessonId]: newLessonProgress };
 
         // Check if next lesson should be unlocked
         const starsCount = Object.values(newStars).filter(Boolean).length;
         if (starsCount >= 4) {
           const nextId = lessonId + 1;
-          const nextProgressDoc = await getDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()));
-          if (!nextProgressDoc.exists()) {
-            await setDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), {
-              stars: { flashcards: false, bubble: false, hangman: false, battleship: false, piano: false },
+          if (!newUserProgress[nextId]) {
+            newUserProgress[nextId] = {
+              stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
               unlocked: true,
-            });
+            };
           } else {
-            await updateDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), { unlocked: true });
+            newUserProgress[nextId] = { ...newUserProgress[nextId], unlocked: true };
           }
+        }
+
+        set(state => ({
+          userProgress: { ...state.userProgress, [currentUser]: newUserProgress }
+        }));
+
+        if (get().userType === 'teacher') {
+          await setDoc(doc(db, `userProgress/${currentUser}/lessons`, lessonId.toString()), newLessonProgress);
+          if (starsCount >= 4) {
+            const nextId = lessonId + 1;
+            await setDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), newUserProgress[nextId]);
+          }
+        }
+      },
+
+      completeAssignment: async (lessonId) => {
+        const { currentUser } = get();
+        if (!currentUser) return;
+
+        const currentProgressMap = get().userProgress[currentUser] || {};
+        const currentProgress = currentProgressMap[lessonId] || {
+          stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
+          unlocked: lessonId === 1,
+        };
+
+        const newLessonProgress = { ...currentProgress, assignmentCompleted: true };
+        
+        set(state => ({
+          userProgress: { 
+            ...state.userProgress, 
+            [currentUser]: { ...currentProgressMap, [lessonId]: newLessonProgress } 
+          }
+        }));
+
+        if (get().userType === 'teacher') {
+          await setDoc(doc(db, `userProgress/${currentUser}/lessons`, lessonId.toString()), newLessonProgress);
         }
       },
 
@@ -347,45 +389,147 @@ export const useAppStore = create<AppState>()(
 
       addNote: async (word, note) => {
         const { currentUser } = get();
-        if (!currentUser || currentUser === 'teacher') return;
+        if (!currentUser) return;
 
         const id = Math.random().toString(36).substring(7);
         const newNote = { ...note, id, word };
-        await setDoc(doc(db, `userNotes/${currentUser}/notes`, id), newNote);
+        
+        set(state => {
+          const userNotes = state.userNotes[currentUser] || {};
+          const wordNotes = userNotes[word] || [];
+          return {
+            userNotes: {
+              ...state.userNotes,
+              [currentUser]: {
+                ...userNotes,
+                [word]: [...wordNotes, newNote]
+              }
+            }
+          };
+        });
+
+        if (get().userType === 'teacher') {
+          await setDoc(doc(db, `userNotes/${currentUser}/notes`, id), newNote);
+        }
       },
 
       deleteNote: async (word, noteId) => {
         const { currentUser } = get();
-        if (!currentUser || currentUser === 'teacher') return;
-        await deleteDoc(doc(db, `userNotes/${currentUser}/notes`, noteId));
+        if (!currentUser) return;
+
+        set(state => {
+          const userNotes = state.userNotes[currentUser] || {};
+          const wordNotes = userNotes[word] || [];
+          return {
+            userNotes: {
+              ...state.userNotes,
+              [currentUser]: {
+                ...userNotes,
+                [word]: wordNotes.filter(n => n.id !== noteId)
+              }
+            }
+          };
+        });
+
+        if (get().userType === 'teacher') {
+          await deleteDoc(doc(db, `userNotes/${currentUser}/notes`, noteId));
+        }
       },
 
       updateNote: async (word, noteId, updates) => {
         const { currentUser } = get();
-        if (!currentUser || currentUser === 'teacher') return;
-        await updateDoc(doc(db, `userNotes/${currentUser}/notes`, noteId), updates);
+        if (!currentUser) return;
+
+        set(state => {
+          const userNotes = state.userNotes[currentUser] || {};
+          const wordNotes = userNotes[word] || [];
+          return {
+            userNotes: {
+              ...state.userNotes,
+              [currentUser]: {
+                ...userNotes,
+                [word]: wordNotes.map(n => n.id === noteId ? { ...n, ...updates } : n)
+              }
+            }
+          };
+        });
+
+        if (get().userType === 'teacher') {
+          await updateDoc(doc(db, `userNotes/${currentUser}/notes`, noteId), updates);
+        }
       },
 
       updateUserNote: async (username, word, noteId, updates) => {
+        set(state => {
+          const userNotes = state.userNotes[username] || {};
+          const wordNotes = userNotes[word] || [];
+          return {
+            userNotes: {
+              ...state.userNotes,
+              [username]: {
+                ...userNotes,
+                [word]: wordNotes.map(n => n.id === noteId ? { ...n, ...updates } : n)
+              }
+            }
+          };
+        });
         await updateDoc(doc(db, `userNotes/${username}/notes`, noteId), updates);
       },
 
       updateVocabStats: async (word, updates) => {
         const { currentUser } = get();
-        if (!currentUser || currentUser === 'teacher') return;
+        if (!currentUser) return;
         const current = get().userStats[currentUser]?.[word] || { difficulty: 0, viewCount: 0 };
-        await setDoc(doc(db, `userStats/${currentUser}/words`, word), { ...current, ...updates });
+        const updated = { ...current, ...updates };
+
+        set(state => ({
+          userStats: {
+            ...state.userStats,
+            [currentUser]: {
+              ...(state.userStats[currentUser] || {}),
+              [word]: updated
+            }
+          }
+        }));
+
+        if (get().userType === 'teacher') {
+          await setDoc(doc(db, `userStats/${currentUser}/words`, word), updated);
+        }
       },
 
       incrementViewCount: async (word) => {
         const { currentUser } = get();
-        if (!currentUser || currentUser === 'teacher') return;
+        if (!currentUser) return;
         const current = get().userStats[currentUser]?.[word] || { difficulty: 0, viewCount: 0 };
-        await setDoc(doc(db, `userStats/${currentUser}/words`, word), { ...current, viewCount: current.viewCount + 1 });
+        const updated = { ...current, viewCount: current.viewCount + 1 };
+
+        set(state => ({
+          userStats: {
+            ...state.userStats,
+            [currentUser]: {
+              ...(state.userStats[currentUser] || {}),
+              [word]: updated
+            }
+          }
+        }));
+
+        if (get().userType === 'teacher') {
+          await setDoc(doc(db, `userStats/${currentUser}/words`, word), updated);
+        }
       },
 
       updateLesson: async (lessonId, updates) => {
-        await updateDoc(doc(db, 'lessons', lessonId.toString()), updates);
+        // Update local state immediately for responsiveness
+        set(state => ({
+          customLessons: state.customLessons.map(l => l.id === lessonId ? { ...l, ...updates } : l)
+        }));
+
+        // Update Firestore
+        try {
+          await updateDoc(doc(db, 'lessons', lessonId.toString()), updates);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `lessons/${lessonId}`);
+        }
       },
 
       saveProgress: () => {
@@ -400,6 +544,10 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         userType: state.userType,
         currentUser: state.currentUser,
+        studentActivity: state.studentActivity,
+        userProgress: state.userProgress,
+        userNotes: state.userNotes,
+        userStats: state.userStats,
       }),
     }
   )

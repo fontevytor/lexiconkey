@@ -10,7 +10,8 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() && 
-        (request.auth.token.email == "fontevytor@gmail.com" && request.auth.token.email_verified == true);
+        request.auth.token.email == "fontevytor@gmail.com" && 
+        request.auth.token.email_verified == true;
     }
 
     function isOwner(username) {
@@ -46,34 +47,30 @@ service cloud.firestore {
     }
 
     match /userProgress {
-      allow read: if isAdmin();
+      allow list: if isAdmin();
       match /{username}/{document=**} {
-        allow read: if isAdmin() || isOwner(username);
-        allow write: if isAdmin() || isOwner(username);
+        allow read, write: if isAdmin() || isOwner(username);
       }
     }
 
     match /userNotes {
-      allow read: if isAdmin();
+      allow list: if isAdmin();
       match /{username}/{document=**} {
-        allow read: if isAdmin() || isOwner(username);
-        allow write: if isAdmin() || isOwner(username);
+        allow read, write: if isAdmin() || isOwner(username);
       }
     }
 
     match /userStats {
-      allow read: if isAdmin();
+      allow list: if isAdmin();
       match /{username}/{document=**} {
-        allow read: if isAdmin() || isOwner(username);
-        allow write: if isAdmin() || isOwner(username);
+        allow read, write: if isAdmin() || isOwner(username);
       }
     }
 
     match /studentActivity {
-      allow read: if isAdmin();
+      allow list: if isAdmin();
       match /{username} {
-        allow read: if isAdmin() || isOwner(username);
-        allow write: if isAdmin() || isOwner(username);
+        allow read, write: if isAdmin() || isOwner(username);
       }
     }
     

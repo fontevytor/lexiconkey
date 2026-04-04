@@ -16,12 +16,13 @@ import {
   Zap,
   Target,
   Music,
-  Ship,
   X,
   Save,
   CheckCircle2,
   User,
-  ShieldCheck
+  ShieldCheck,
+  Keyboard,
+  ClipboardList
 } from 'lucide-react';
 import { LESSONS, LessonData } from './data/lessons';
 import { useAppStore } from './store/useAppStore';
@@ -29,13 +30,14 @@ import { cn } from './lib/utils';
 import Flashcards from './components/Flashcards';
 import BubbleGame from './components/BubbleGame';
 import Hangman from './components/Hangman';
-import Battleship from './components/Battleship';
+import { WordScramble } from './components/WordScramble';
 import PianoFail from './components/PianoFail';
 import GeneralKnowledge from './components/GeneralKnowledge';
 import TeacherDashboard from './components/TeacherDashboard';
+import { Assignment } from './components/Assignment';
 
-type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'general-knowledge' | 'teacher';
-type ActivityType = 'flashcards' | 'bubble' | 'hangman' | 'battleship' | 'piano';
+type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher';
+type ActivityType = 'flashcards' | 'bubble' | 'hangman' | 'scramble' | 'piano';
 
 export default function App() {
   const { 
@@ -47,14 +49,15 @@ export default function App() {
     setUserType,
     currentUser,
     setCurrentUser,
-    studentAccounts,
     userProgress,
     customLessons,
     initialized,
     initFirestore,
     syncUserData,
     loginAsTeacher,
-    loginAsStudent
+    loginAsStudent,
+    completeActivity,
+    completeAssignment
   } = useAppStore();
 
   const [view, setView] = useState<View>('landing');
@@ -119,13 +122,12 @@ export default function App() {
           setError('Invalid teacher credentials');
         }
       } else if (loginMode === 'student') {
-        const student = studentAccounts.find(s => s.username === username && s.password === password);
-        if (student) {
-          await loginAsStudent(username);
-          setView('home');
-        } else {
-          setError('Invalid student credentials');
+        if (!username.trim()) {
+          setError('Please enter your name');
+          return;
         }
+        await loginAsStudent(username);
+        setView('home');
       }
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -183,11 +185,11 @@ export default function App() {
     };
 
     switch (selectedActivity) {
-      case 'flashcards': return <Flashcards {...props} />;
-      case 'bubble': return <BubbleGame {...props} />;
-      case 'hangman': return <Hangman {...props} />;
-      case 'battleship': return <Battleship {...props} />;
-      case 'piano': return <PianoFail {...props} />;
+      case 'flashcards': return <Flashcards {...props} onComplete={() => { completeActivity(selectedLesson.id, 'flashcards'); setView('lesson-detail'); }} />;
+      case 'bubble': return <BubbleGame {...props} onComplete={() => { completeActivity(selectedLesson.id, 'bubble'); setView('lesson-detail'); }} />;
+      case 'hangman': return <Hangman {...props} onComplete={() => { completeActivity(selectedLesson.id, 'hangman'); setView('lesson-detail'); }} />;
+      case 'scramble': return <WordScramble vocabulary={selectedLesson.vocabulary} onComplete={() => { completeActivity(selectedLesson.id, 'scramble'); }} onClose={() => setView('lesson-detail')} />;
+      case 'piano': return <PianoFail {...props} onComplete={() => { completeActivity(selectedLesson.id, 'piano'); setView('lesson-detail'); }} />;
       default: return null;
     }
   };
@@ -220,10 +222,10 @@ export default function App() {
               {!loginMode ? (
                 <div className="flex flex-col gap-4">
                   <button
-                    onClick={() => setLoginMode('student')}
+                    onClick={() => { loginAsStudent('Local Student'); setView('home'); }}
                     className="px-12 py-5 bg-white text-indigo-600 rounded-[2rem] font-black text-xl shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
                   >
-                    <User size={24} /> Student Mode
+                    <User size={24} /> Start Learning
                   </button>
                   <button
                     onClick={() => setLoginMode('teacher')}
@@ -242,31 +244,35 @@ export default function App() {
                       <ChevronLeft size={24} />
                     </button>
                     <h2 className="text-2xl font-black">
-                      {loginMode === 'teacher' ? 'Teacher Login' : 'Student Login'}
+                      {loginMode === 'teacher' ? 'Teacher Login' : 'Enter Your Name'}
                     </h2>
                   </div>
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-2 ml-1">Username</label>
+                      <label className="block text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-2 ml-1">
+                        {loginMode === 'teacher' ? 'Username' : 'Your Name'}
+                      </label>
                       <input 
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         className="w-full px-6 py-4 bg-white/10 border border-white/20 focus:border-white rounded-2xl outline-none transition-all font-bold text-white placeholder:text-white/30"
-                        placeholder="Enter username"
+                        placeholder={loginMode === 'teacher' ? 'Enter username' : 'Enter your name'}
                       />
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-2 ml-1">Password</label>
-                      <input 
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full px-6 py-4 bg-white/10 border border-white/20 focus:border-white rounded-2xl outline-none transition-all font-bold text-white placeholder:text-white/30"
-                        placeholder="Enter password"
-                      />
-                    </div>
+                    {loginMode === 'teacher' && (
+                      <div>
+                        <label className="block text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-2 ml-1">Password</label>
+                        <input 
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full px-6 py-4 bg-white/10 border border-white/20 focus:border-white rounded-2xl outline-none transition-all font-bold text-white placeholder:text-white/30"
+                          placeholder="Enter password"
+                        />
+                      </div>
+                    )}
                     
                     {error && (
                       <p className="text-red-300 text-sm font-bold text-center bg-red-500/20 py-2 rounded-xl border border-red-500/30">{error}</p>
@@ -285,7 +291,7 @@ export default function App() {
                           <Zap size={24} />
                         </motion.div>
                       ) : (
-                        'Login'
+                        loginMode === 'teacher' ? 'Login' : 'Start'
                       )}
                     </button>
                   </div>
@@ -347,6 +353,7 @@ export default function App() {
               {customLessons.map((lesson, index) => {
                 const unlocked = isLessonUnlocked(lesson.id);
                 const stars = getStarsCount(lesson.id);
+                const assignmentCompleted = currentUser ? userProgress[currentUser]?.[lesson.id]?.assignmentCompleted : false;
                 
                 return (
                   <motion.button
@@ -360,7 +367,13 @@ export default function App() {
                     className={cn(
                       "relative p-8 rounded-[2.5rem] border-2 text-left transition-all overflow-hidden shadow-sm",
                       unlocked 
-                        ? "bg-white border-slate-200 hover:border-indigo-500 hover:shadow-xl cursor-pointer" 
+                        ? (assignmentCompleted 
+                            ? "bg-green-50 border-green-200 hover:border-green-500 hover:shadow-xl cursor-pointer" 
+                            : (stars >= 4 
+                                ? "bg-yellow-50 border-yellow-200 hover:border-yellow-500 hover:shadow-xl cursor-pointer"
+                                : "bg-white border-slate-200 hover:border-indigo-500 hover:shadow-xl cursor-pointer"
+                              )
+                          )
                         : "bg-slate-100 border-transparent opacity-60 grayscale cursor-not-allowed"
                     )}
                   >
@@ -472,11 +485,11 @@ export default function App() {
                 color="bg-emerald-50"
               />
               <ActivityCard 
-                title="Battleship" 
-                desc="Strategic word combat" 
-                icon={<Ship className="text-indigo-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.battleship : false}
-                onClick={() => handleActivitySelect('battleship')}
+                title="Word Scramble" 
+                desc="Unscramble letters to form words" 
+                icon={<Keyboard className="text-indigo-500" />}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars.scramble : false}
+                onClick={() => handleActivitySelect('scramble')}
                 color="bg-indigo-50"
               />
               <ActivityCard 
@@ -487,8 +500,26 @@ export default function App() {
                 onClick={() => handleActivitySelect('piano')}
                 color="bg-violet-50"
               />
+              <div className="md:col-span-2">
+                <ActivityCard 
+                  title="Extra Assignment" 
+                  desc="Test your knowledge with 10 questions" 
+                  icon={<ClipboardList className="text-emerald-600" />}
+                  completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.assignmentCompleted : false}
+                  onClick={() => setView('assignment')}
+                  color="bg-emerald-50"
+                />
+              </div>
             </div>
           </motion.div>
+        )}
+
+        {view === 'assignment' && selectedLesson && (
+          <Assignment 
+            questions={selectedLesson.assignments || []}
+            onComplete={() => completeAssignment(selectedLesson.id)}
+            onClose={() => setView('lesson-detail')}
+          />
         )}
 
         {view === 'activity' && (
