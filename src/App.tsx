@@ -363,6 +363,16 @@ export default function App() {
                     Lexicon<span className="text-indigo-600">.</span>
                   </h1>
                 </div>
+                {currentUser && studentActivity[currentUser] && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-2xl w-fit">
+                      <Zap size={18} className="text-indigo-600 fill-indigo-600" />
+                      <span className="font-black text-indigo-900 text-sm">
+                        STREAK: {studentActivity[currentUser].streak || 0} DAYS
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <p className="text-slate-700 text-lg font-medium">Master your vocabulary through play.</p>
               </div>
               <div className={cn(

@@ -17,7 +17,7 @@ export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsP
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
-  const { currentUser, updateVocabStats, toggleFavoriteCard, favoriteCards } = useAppStore();
+  const { currentUser, updateVocabStats, toggleFavoriteCard, favoriteCards, incrementViewCount, userStats } = useAppStore();
 
   const verbs = lesson.verbs || [];
 
@@ -26,6 +26,12 @@ export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsP
       setPool([...verbs].sort(() => Math.random() - 0.5));
     }
   }, [lesson]);
+
+  useEffect(() => {
+    if (currentUser && currentUser !== 'teacher' && pool.length > 0 && pool[currentIndex]) {
+      incrementViewCount(pool[currentIndex].word);
+    }
+  }, [currentIndex, pool, currentUser, incrementViewCount]);
 
   const handleFlip = () => setIsFlipped(!isFlipped);
 
@@ -149,15 +155,23 @@ export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsP
                   <div className="w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
                     <p className="text-indigo-200 text-xs font-black uppercase tracking-widest text-center mb-3">Rate Difficulty (0-10)</p>
                     <div className="flex flex-wrap justify-center gap-1.5">
-                      {[...Array(11)].map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handleDifficulty(i)}
-                          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/30 text-white text-[10px] font-black transition-colors border border-white/20"
-                        >
-                          {i}
-                        </button>
-                      ))}
+                      {[...Array(11)].map((_, i) => {
+                        const currentDifficulty = currentUser ? userStats[currentUser]?.[currentCard.word]?.difficulty : 0;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handleDifficulty(i)}
+                            className={cn(
+                              "w-7 h-7 rounded-lg text-[10px] font-black transition-all border",
+                              currentDifficulty === i 
+                                ? "bg-white text-indigo-600 border-white shadow-lg scale-110" 
+                                : "bg-white/10 text-white border-white/20 hover:bg-white/30"
+                            )}
+                          >
+                            {i}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

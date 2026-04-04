@@ -41,7 +41,9 @@ export default function Hangman({ lesson, onComplete, onBack }: HangmanProps) {
   };
 
   const startLevel = (lvl: number) => {
-    const word = lesson.vocabulary[lvl % lesson.vocabulary.length].word.toUpperCase();
+    const vocab = lesson.vocabulary;
+    const randomWord = vocab[Math.floor(Math.random() * vocab.length)];
+    const word = randomWord.word.toUpperCase();
     setTargetWord(word);
     setGuessedLetters([]);
     setMistakes(0);

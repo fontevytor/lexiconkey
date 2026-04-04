@@ -45,6 +45,10 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
       const vocab = lesson.vocabulary.map(v => ({ ...v, lessonId: lesson.id }));
       const verbs = (lesson.verbs || []).map(v => ({ ...v, lessonId: lesson.id, isVerb: true }));
       return [...vocab, ...verbs];
+    })
+    .filter(item => {
+      const stats = currentUserStats[item.word];
+      return stats && (stats.viewCount > 0 || stats.difficulty > 0);
     });
 
   const filteredVocab = unlockedVocabulary

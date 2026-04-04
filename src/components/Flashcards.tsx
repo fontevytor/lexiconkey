@@ -17,7 +17,7 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
-  const { currentUser, completeActivity, updateVocabStats, updateStudentActivity, toggleFavoriteCard, favoriteCards } = useAppStore();
+  const { currentUser, completeActivity, updateVocabStats, updateStudentActivity, toggleFavoriteCard, favoriteCards, incrementViewCount, userStats } = useAppStore();
 
   useEffect(() => {
     setPool([...lesson.vocabulary].sort(() => Math.random() - 0.5));
@@ -29,8 +29,9 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
         lessonId: lesson.id, 
         wordIndex: currentIndex 
       });
+      incrementViewCount(pool[currentIndex].word);
     }
-  }, [currentIndex, pool, currentUser, lesson.id]);
+  }, [currentIndex, pool, currentUser, lesson.id, incrementViewCount]);
 
   const handleFlip = () => setIsFlipped(!isFlipped);
 
@@ -138,15 +139,23 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
                   <div className="w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
                     <p className="text-indigo-100 text-xs font-black uppercase tracking-widest text-center mb-3">Rate Difficulty (0-10)</p>
                     <div className="flex flex-wrap justify-center gap-1.5">
-                      {[...Array(11)].map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handleDifficulty(i)}
-                          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/30 text-white text-[10px] font-black transition-colors border border-white/20"
-                        >
-                          {i}
-                        </button>
-                      ))}
+                      {[...Array(11)].map((_, i) => {
+                        const currentDifficulty = currentUser ? userStats[currentUser]?.[currentCard.word]?.difficulty : 0;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handleDifficulty(i)}
+                            className={cn(
+                              "w-7 h-7 rounded-lg text-[10px] font-black transition-all border",
+                              currentDifficulty === i 
+                                ? "bg-white text-indigo-600 border-white shadow-lg scale-110" 
+                                : "bg-white/10 text-white border-white/20 hover:bg-white/30"
+                            )}
+                          >
+                            {i}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

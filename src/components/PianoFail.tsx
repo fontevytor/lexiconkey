@@ -23,8 +23,10 @@ export default function PianoFail({ lesson, onComplete, onBack }: PianoFailProps
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const startLevel = (lvl: number) => {
-    if (!lesson.phrases[lvl % lesson.phrases.length]) return;
-    setTargetPhrase(lesson.phrases[lvl % lesson.phrases.length].toUpperCase());
+    const phrases = lesson.phrases;
+    if (!phrases || phrases.length === 0) return;
+    const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+    setTargetPhrase(randomPhrase.toUpperCase());
     setGuessedLetters([]);
     setMistakes(0);
     setShowSuccess(false);

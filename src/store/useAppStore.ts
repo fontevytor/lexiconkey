@@ -112,6 +112,8 @@ interface StudentActivity {
   wordIndex: number;
   lastSaved: number;
   gameProgress: Record<number, GameState>; // Key is lessonId
+  streak: number;
+  lastActivityAt: number;
 }
 
 interface WordOfTheDay {
@@ -149,6 +151,7 @@ interface AppState {
   updateUserNote: (username: string, word: string, noteId: string, updates: Partial<CustomNote>) => Promise<void>;
   updateVocabStats: (word: string, updates: Partial<VocabularyStats>) => Promise<void>;
   incrementViewCount: (word: string) => Promise<void>;
+  recordActivity: () => Promise<void>;
   updateLesson: (lessonId: number, updates: Partial<LessonData>) => Promise<void>;
   addLesson: (lesson: LessonData) => Promise<void>;
   reorderLessons: (newLessons: LessonData[]) => Promise<void>;
@@ -320,7 +323,14 @@ export const useAppStore = create<AppState>()(
       },
 
       updateStudentActivity: async (username, activity) => {
-        const current = get().studentActivity[username] || { lessonId: 1, wordIndex: 0, lastSaved: Date.now(), gameProgress: {} };
+        const current = get().studentActivity[username] || { 
+          lessonId: 1, 
+          wordIndex: 0, 
+          lastSaved: Date.now(), 
+          gameProgress: {},
+          streak: 0,
+          lastActivityAt: Date.now()
+        };
         const updated = { ...current, ...activity, lastSaved: Date.now() };
         
         set(state => ({
@@ -332,11 +342,52 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      recordActivity: async () => {
+        const { currentUser, studentActivity } = get();
+        if (!currentUser || currentUser === 'teacher') return;
+
+        const now = Date.now();
+        const current = studentActivity[currentUser] || { 
+          lessonId: 1, 
+          wordIndex: 0, 
+          lastSaved: now, 
+          gameProgress: {},
+          streak: 0,
+          lastActivityAt: now
+        };
+
+        const twelveHours = 12 * 60 * 60 * 1000;
+        let newStreak = current.streak;
+
+        if (now - current.lastActivityAt > twelveHours) {
+          newStreak = 1;
+        } else {
+          // Only increment if it's been at least 30 minutes since last increment to avoid spam
+          if (now - current.lastActivityAt > 30 * 60 * 1000) {
+            newStreak += 1;
+          } else if (newStreak === 0) {
+            newStreak = 1;
+          }
+        }
+
+        await get().updateStudentActivity(currentUser, { 
+          streak: newStreak, 
+          lastActivityAt: now 
+        });
+      },
+
       updateGameProgress: async (lessonId, game, progress) => {
         const { currentUser, studentActivity } = get();
         if (!currentUser) return;
 
-        const currentActivity = studentActivity[currentUser] || { lessonId, wordIndex: 0, gameProgress: {}, lastSaved: Date.now() };
+        const currentActivity = studentActivity[currentUser] || { 
+          lessonId, 
+          wordIndex: 0, 
+          gameProgress: {}, 
+          lastSaved: Date.now(),
+          streak: 0,
+          lastActivityAt: Date.now()
+        };
         const lessonProgress = currentActivity.gameProgress[lessonId] || {};
         
         set(state => ({
@@ -555,6 +606,8 @@ export const useAppStore = create<AppState>()(
           }
         }));
 
+        await get().recordActivity();
+
         if (get().userType === 'teacher') {
           await setDoc(doc(db, `userStats/${currentUser}/words`, word), updated);
         }
@@ -575,6 +628,8 @@ export const useAppStore = create<AppState>()(
             }
           }
         }));
+
+        await get().recordActivity();
 
         if (get().userType === 'teacher') {
           await setDoc(doc(db, `userStats/${currentUser}/words`, word), updated);

@@ -45,7 +45,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ lesson, onComplete, 
   };
 
   const vocabulary = lesson.vocabulary;
-  const currentWord = vocabulary[level % vocabulary.length];
+  const currentWord = useMemo(() => vocabulary[Math.floor(Math.random() * vocabulary.length)], [level, vocabulary]);
   const targetWord = currentWord.word.toUpperCase();
 
   useEffect(() => {

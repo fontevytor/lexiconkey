@@ -214,7 +214,9 @@ export default function BubbleGame({ lesson, onComplete, onBack }: { lesson: Les
   }, []);
 
   const startLevel = useCallback((lvl: number) => {
-    const word = lesson.vocabulary[lvl % lesson.vocabulary.length].word.toUpperCase();
+    const vocab = lesson.vocabulary;
+    const randomWord = vocab[Math.floor(Math.random() * vocab.length)];
+    const word = randomWord.word.toUpperCase();
     setTargetWord(word);
     setCurrentLetterIndex(0);
     setTimeLeft(120);

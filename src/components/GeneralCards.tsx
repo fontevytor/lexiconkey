@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Check, X, Star, Trash2 } from 'lucide-react';
+import { ChevronLeft, Check, X, Star, Trash2, Eye, Edit3, MessageSquare, HelpCircle } from 'lucide-react';
 import { Vocabulary } from '../data/lessons';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
@@ -9,13 +9,32 @@ interface GeneralCardsProps {
   onBack: () => void;
 }
 
+const DIFFICULTY_COLORS = {
+  0: 'bg-white border-slate-100',
+  1: 'bg-green-50 border-green-200',
+  2: 'bg-yellow-50 border-yellow-200',
+  3: 'bg-orange-50 border-orange-200',
+  4: 'bg-red-50 border-red-200',
+  5: 'bg-purple-50 border-purple-200',
+};
+
+const DIFFICULTY_TEXT = {
+  0: 'Unrated',
+  1: 'Very Easy',
+  2: 'Easy',
+  3: 'Medium',
+  4: 'Hard',
+  5: 'Expert',
+};
+
 export default function GeneralCards({ onBack }: GeneralCardsProps) {
-  const { currentUser, favoriteCards, customLessons, toggleFavoriteCard } = useAppStore();
+  const { currentUser, favoriteCards, customLessons, toggleFavoriteCard, userStats, userNotes, updateVocabStats } = useAppStore();
   const [view, setView] = useState<'selection' | 'cards'>('selection');
-  const [filterType, setFilterType] = useState<'all' | 'verbs'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'verbs' | 'practice'>('all');
   const [pool, setPool] = useState<Vocabulary[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [showRatingSelector, setShowRatingSelector] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -27,6 +46,10 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
       });
       
       const filtered = allVocab.filter(v => {
+        if (filterType === 'practice') {
+          const notes = userNotes[currentUser]?.[v.word] || [];
+          return notes.length > 0;
+        }
         const isFavorite = favorites.includes(v.word);
         if (!isFavorite) return false;
         if (filterType === 'verbs') return (v as any).origin === 'verbs';
@@ -35,7 +58,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
 
       // Remove duplicates if any
       const unique = Array.from(new Map(filtered.map(v => [v.word, v])).values());
-      setPool(unique.sort(() => Math.random() - 0.5));
+      setPool(unique);
     }
   }, [currentUser, favoriteCards, customLessons, filterType]);
 
@@ -43,6 +66,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
 
   const handleNext = () => {
     setIsFlipped(false);
+    setShowRatingSelector(false);
     setCurrentIndex((currentIndex + 1) % pool.length);
   };
 
@@ -52,6 +76,13 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
       setView('selection');
     } else if (currentIndex >= pool.length - 1) {
       setCurrentIndex(0);
+    }
+  };
+
+  const handleUpdateRating = async (rating: number) => {
+    if (currentUser && currentCard) {
+      await updateVocabStats(currentCard.word, { difficulty: rating });
+      setShowRatingSelector(false);
     }
   };
 
@@ -95,6 +126,17 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
             <h3 className="text-4xl font-black text-slate-900 mb-2">Favorited Words</h3>
             <p className="text-slate-500 font-medium text-lg">Review all vocabulary you've marked as favorites.</p>
           </button>
+
+          <button
+            onClick={() => { setFilterType('practice'); setView('cards'); setCurrentIndex(0); }}
+            className="group p-12 bg-white border-4 border-slate-100 rounded-[4rem] hover:border-amber-500 hover:shadow-2xl hover:shadow-amber-500/10 transition-all text-left relative overflow-hidden md:col-span-2"
+          >
+            <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+              <HelpCircle size={40} />
+            </div>
+            <h3 className="text-4xl font-black text-slate-900 mb-2">Custom Practices</h3>
+            <p className="text-slate-500 font-medium text-lg">Review all words that have your custom notes and sentences.</p>
+          </button>
         </div>
       </motion.div>
     );
@@ -121,6 +163,10 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
   }
 
   const currentCard = pool[currentIndex];
+  const stats = currentUser ? userStats[currentUser]?.[currentCard.word] : null;
+  const notes = currentUser ? userNotes[currentUser]?.[currentCard.word] || [] : [];
+  const difficulty = stats?.difficulty || 0;
+  const viewCount = stats?.viewCount || 0;
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
@@ -129,14 +175,14 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
           <ChevronLeft size={24} />
         </button>
         <h2 className="text-xl font-black text-slate-900">
-          {filterType === 'verbs' ? 'Favorited Verbs' : 'Favorited Words'}
+          {filterType === 'verbs' ? 'Favorited Verbs' : filterType === 'practice' ? 'Custom Practices' : 'Favorited Words'}
         </h2>
         <div className="text-sm font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">
           {currentIndex + 1} / {pool.length}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full gap-12">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full gap-8">
         <div className="relative w-full aspect-[4/3] perspective-1000">
           <AnimatePresence mode="wait">
             <motion.div
@@ -152,7 +198,21 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
                 animate={{ rotateY: isFlipped ? 180 : 0 }}
               >
                 {/* Front */}
-                <div className="absolute inset-0 backface-hidden bg-white border-2 border-slate-100 rounded-[3rem] flex flex-col items-center justify-center p-8 shadow-xl shadow-slate-200/50">
+                <div className={cn(
+                  "absolute inset-0 backface-hidden border-2 rounded-[3rem] flex flex-col items-center justify-center p-8 shadow-xl transition-colors duration-500",
+                  DIFFICULTY_COLORS[difficulty as keyof typeof DIFFICULTY_COLORS]
+                )}>
+                  <div className="absolute top-8 left-8 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-slate-200/50">
+                      <Eye size={16} className="text-slate-400" />
+                      <span className="text-xs font-black text-slate-600">{viewCount} views</span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-slate-200/50">
+                      <Edit3 size={16} className="text-slate-400" />
+                      <span className="text-xs font-black text-slate-600">{DIFFICULTY_TEXT[difficulty as keyof typeof DIFFICULTY_TEXT]}</span>
+                    </div>
+                  </div>
+
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleRemove(currentCard.word); }}
                     className="absolute top-8 right-8 p-3 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-100 transition-all"
@@ -160,9 +220,27 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
                   >
                     <Trash2 size={24} />
                   </button>
+
                   <h2 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tight text-center">
                     {currentCard.word}
                   </h2>
+
+                  {notes.length > 0 && (
+                    <div className="absolute bottom-16 left-8 right-8">
+                      <div className="flex items-center gap-2 text-slate-400 mb-2">
+                        <MessageSquare size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">My Notes</span>
+                      </div>
+                          <div className="max-h-20 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                            {notes.map((note, i) => (
+                              <div key={i} className="bg-white/40 p-2 rounded-lg text-xs font-medium text-slate-600 border border-slate-200/30">
+                                {note.text}
+                              </div>
+                            ))}
+                          </div>
+                    </div>
+                  )}
+
                   <p className="absolute bottom-8 text-slate-400 text-xs font-black uppercase tracking-widest">Click to flip</p>
                 </div>
 
@@ -180,13 +258,51 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
           </AnimatePresence>
         </div>
 
-        <div className="flex gap-6 w-full">
-          <button
-            onClick={handleNext}
-            className="flex-1 flex items-center justify-center gap-3 py-6 bg-white border-2 border-slate-100 rounded-[2.5rem] text-slate-600 font-black text-xl shadow-sm hover:border-indigo-200 transition-all"
-          >
-            Next Card
-          </button>
+        <div className="flex flex-col gap-4 w-full">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setShowRatingSelector(!showRatingSelector)}
+              className="flex-1 flex items-center justify-center gap-3 py-5 bg-white border-2 border-slate-100 rounded-[2rem] text-slate-600 font-black text-lg shadow-sm hover:border-indigo-200 transition-all"
+            >
+              <Edit3 size={20} />
+              Change Rating
+            </button>
+            <button
+              onClick={handleNext}
+              className="flex-1 flex items-center justify-center gap-3 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all"
+            >
+              Next Card
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {showRatingSelector && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-xl"
+              >
+                <p className="text-center text-xs font-black text-slate-400 uppercase tracking-widest mb-4">How difficult is this card?</p>
+                <div className="flex justify-between gap-2">
+                  {[1, 2, 3, 4, 5].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => handleUpdateRating(r)}
+                      className={cn(
+                        "flex-1 py-3 rounded-xl font-black text-sm transition-all border-2",
+                        difficulty === r 
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-lg" 
+                          : "bg-slate-50 text-slate-400 border-slate-100 hover:border-indigo-200"
+                      )}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
