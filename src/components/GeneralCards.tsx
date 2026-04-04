@@ -11,6 +11,8 @@ interface GeneralCardsProps {
 
 export default function GeneralCards({ onBack }: GeneralCardsProps) {
   const { currentUser, favoriteCards, customLessons, toggleFavoriteCard } = useAppStore();
+  const [view, setView] = useState<'selection' | 'cards'>('selection');
+  const [filterType, setFilterType] = useState<'all' | 'verbs'>('all');
   const [pool, setPool] = useState<Vocabulary[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -19,16 +21,23 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
     if (currentUser) {
       const favorites = favoriteCards[currentUser] || [];
       const allVocab = customLessons.flatMap(l => {
-        const vocab = l.vocabulary;
-        const verbs = l.verbs || [];
+        const vocab = l.vocabulary.map(v => ({ ...v, lessonId: l.id, origin: 'vocabulary' }));
+        const verbs = (l.verbs || []).map(v => ({ ...v, lessonId: l.id, origin: 'verbs' }));
         return [...vocab, ...verbs];
       });
-      const filtered = allVocab.filter(v => favorites.includes(v.word));
+      
+      const filtered = allVocab.filter(v => {
+        const isFavorite = favorites.includes(v.word);
+        if (!isFavorite) return false;
+        if (filterType === 'verbs') return (v as any).origin === 'verbs';
+        return (v as any).origin === 'vocabulary';
+      });
+
       // Remove duplicates if any
       const unique = Array.from(new Map(filtered.map(v => [v.word, v])).values());
       setPool(unique.sort(() => Math.random() - 0.5));
     }
-  }, [currentUser, favoriteCards, customLessons]);
+  }, [currentUser, favoriteCards, customLessons, filterType]);
 
   const handleFlip = () => setIsFlipped(!isFlipped);
 
@@ -40,11 +49,56 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
   const handleRemove = (word: string) => {
     toggleFavoriteCard(word);
     if (pool.length <= 1) {
-      onBack();
+      setView('selection');
     } else if (currentIndex >= pool.length - 1) {
       setCurrentIndex(0);
     }
   };
+
+  if (view === 'selection') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="max-w-4xl mx-auto p-6 pt-24"
+      >
+        <header className="flex items-center gap-4 mb-16">
+          <button onClick={onBack} className="p-3 hover:bg-white rounded-2xl transition-all text-slate-600 shadow-sm border border-slate-100">
+            <ChevronLeft size={24} />
+          </button>
+          <div>
+            <h2 className="text-5xl font-black text-slate-900 tracking-tighter">Study <span className="text-indigo-600">Cards</span></h2>
+            <p className="text-slate-500 font-medium">Select what you want to study from your favorites.</p>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <button
+            onClick={() => { setFilterType('verbs'); setView('cards'); setCurrentIndex(0); }}
+            className="group p-12 bg-white border-4 border-slate-100 rounded-[4rem] hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all text-left relative overflow-hidden"
+          >
+            <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+              <Star size={40} />
+            </div>
+            <h3 className="text-4xl font-black text-slate-900 mb-2">Favorited Verbs</h3>
+            <p className="text-slate-500 font-medium text-lg">Review all verbs you've marked as favorites.</p>
+          </button>
+
+          <button
+            onClick={() => { setFilterType('all'); setView('cards'); setCurrentIndex(0); }}
+            className="group p-12 bg-white border-4 border-slate-100 rounded-[4rem] hover:border-emerald-500 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all text-left relative overflow-hidden"
+          >
+            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+              <Star size={40} />
+            </div>
+            <h3 className="text-4xl font-black text-slate-900 mb-2">Favorited Words</h3>
+            <p className="text-slate-500 font-medium text-lg">Review all vocabulary you've marked as favorites.</p>
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (pool.length === 0) {
     return (
@@ -57,7 +111,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
           Favorite cards in your lessons to see them here for extra study.
         </p>
         <button 
-          onClick={onBack}
+          onClick={() => setView('selection')}
           className="px-8 py-4 bg-indigo-600 text-white rounded-[2rem] font-black shadow-xl shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all"
         >
           Go Back
@@ -71,10 +125,12 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       <div className="p-6 flex items-center justify-between max-w-2xl mx-auto w-full">
-        <button onClick={onBack} className="p-3 hover:bg-white rounded-2xl transition-all text-slate-600 shadow-sm">
+        <button onClick={() => setView('selection')} className="p-3 hover:bg-white rounded-2xl transition-all text-slate-600 shadow-sm">
           <ChevronLeft size={24} />
         </button>
-        <h2 className="text-xl font-black text-slate-900">General Study Cards</h2>
+        <h2 className="text-xl font-black text-slate-900">
+          {filterType === 'verbs' ? 'Favorited Verbs' : 'Favorited Words'}
+        </h2>
         <div className="text-sm font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">
           {currentIndex + 1} / {pool.length}
         </div>
