@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Check, X, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Check, X, RotateCcw, Star } from 'lucide-react';
 import { LessonData, Vocabulary } from '../data/lessons';
 import { useAppStore } from '../store/useAppStore';
+import { cn } from '../lib/utils';
 import confetti from 'canvas-confetti';
 
 interface FlashcardsProps {
@@ -16,7 +17,7 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
-  const { currentUser, completeActivity, updateVocabStats, updateStudentActivity } = useAppStore();
+  const { currentUser, completeActivity, updateVocabStats, updateStudentActivity, toggleFavoriteCard, favoriteCards } = useAppStore();
 
   useEffect(() => {
     setPool([...lesson.vocabulary].sort(() => Math.random() - 0.5));
@@ -69,6 +70,7 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
   if (pool.length === 0 || currentIndex >= pool.length) return null;
 
   const currentCard = pool[currentIndex];
+  const isFavorite = currentUser && currentCard ? (favoriteCards[currentUser] || []).includes(currentCard.word) : false;
   const progress = (completedCount / lesson.vocabulary.length) * 100;
 
   return (
@@ -109,6 +111,15 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
               >
                 {/* Front */}
                 <div className="absolute inset-0 backface-hidden bg-white border-2 border-slate-200 rounded-3xl flex items-center justify-center p-8 shadow-[0_20px_50px_rgba(0,0,0,0.05)]">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); toggleFavoriteCard(currentCard.word); }}
+                    className={cn(
+                      "absolute top-6 right-6 p-3 rounded-2xl transition-all",
+                      isFavorite ? "bg-amber-100 text-amber-500" : "bg-slate-50 text-slate-300 hover:text-slate-400"
+                    )}
+                  >
+                    <Star size={24} fill={isFavorite ? "currentColor" : "none"} />
+                  </button>
                   <h2 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tight text-center">
                     {currentCard.word}
                   </h2>

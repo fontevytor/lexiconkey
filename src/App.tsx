@@ -35,9 +35,11 @@ import PianoFail from './components/PianoFail';
 import GeneralKnowledge from './components/GeneralKnowledge';
 import TeacherDashboard from './components/TeacherDashboard';
 import { Assignment } from './components/Assignment';
+import GeneralCards from './components/GeneralCards';
 
-type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher';
+type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher' | 'general-cards';
 type ActivityType = 'flashcards' | 'bubble' | 'hangman' | 'scramble' | 'piano';
+type DeviceType = 'mobile' | 'tablet' | 'desktop';
 
 export default function App() {
   const { 
@@ -61,6 +63,7 @@ export default function App() {
   } = useAppStore();
 
   const [view, setView] = useState<View>('landing');
+  const [deviceType, setDeviceType] = useState<DeviceType>('desktop');
   const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<ActivityType | null>(null);
   const [showSaved, setShowSaved] = useState(false);
@@ -220,18 +223,38 @@ export default function App() {
               </div>
 
               {!loginMode ? (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-6 w-full">
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest text-center">Choose your device</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(['mobile', 'tablet', 'desktop'] as DeviceType[]).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setDeviceType(type)}
+                          className={cn(
+                            "py-3 rounded-2xl font-black text-xs transition-all border-2",
+                            deviceType === type 
+                              ? "bg-white text-indigo-600 border-white shadow-lg" 
+                              : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+                          )}
+                        >
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <button
                     onClick={() => { loginAsStudent('Local Student'); setView('home'); }}
-                    className="px-12 py-5 bg-white text-indigo-600 rounded-[2rem] font-black text-xl shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
+                    className="px-12 py-6 bg-white text-indigo-600 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
                   >
-                    <User size={24} /> Start Learning
+                    <User size={28} /> Start Learning
                   </button>
                   <button
                     onClick={() => setLoginMode('teacher')}
-                    className="px-12 py-5 bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/20 rounded-[2rem] font-black text-xl shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
+                    className="px-12 py-4 bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/20 rounded-[2rem] font-black text-lg shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
                   >
-                    <ShieldCheck size={24} /> Teacher Mode
+                    <ShieldCheck size={20} /> Teacher Mode
                   </button>
                 </div>
               ) : (
@@ -307,49 +330,64 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="max-w-6xl mx-auto p-6 pt-12"
+            className={cn(
+              "mx-auto p-6 pt-12 transition-all duration-500",
+              deviceType === 'mobile' ? "max-w-md" : deviceType === 'tablet' ? "max-w-3xl" : "max-w-6xl"
+            )}
           >
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-16">
+            <header className={cn(
+              "flex flex-col justify-between gap-8 mb-16",
+              deviceType !== 'mobile' && "md:flex-row md:items-center"
+            )}>
               <div>
                 <div className="flex items-center gap-4 mb-2">
-                  <h1 className="text-6xl font-black tracking-tighter text-slate-900">
+                  <h1 className={cn(
+                    "font-black tracking-tighter text-slate-900",
+                    deviceType === 'mobile' ? "text-4xl" : "text-6xl"
+                  )}>
                     Lexicon<span className="text-indigo-600">.</span>
                   </h1>
-                  <span className="px-4 py-1.5 bg-indigo-100 text-indigo-600 rounded-full text-xs font-black uppercase tracking-widest">
-                    Student: {currentUser}
-                  </span>
                 </div>
                 <p className="text-slate-700 text-lg font-medium">Master your vocabulary through play.</p>
-                <div className="flex items-center gap-2 mt-4 text-slate-500 text-sm font-bold">
-                  <CheckCircle2 size={16} className="text-emerald-500" />
-                  Auto-save active • Last saved: {new Date(lastSaved).toLocaleTimeString()}
-                </div>
               </div>
-              <div className="flex gap-4">
+              <div className={cn(
+                "flex flex-wrap gap-3",
+                deviceType === 'mobile' && "grid grid-cols-2"
+              )}>
                 <button 
                   onClick={handleLogout}
-                  className="px-6 py-4 bg-white border-2 border-slate-200 rounded-[2rem] hover:border-rose-500 hover:text-rose-600 transition-all font-black text-slate-800 shadow-sm"
+                  className="px-6 py-4 bg-white border-2 border-slate-200 rounded-[2rem] hover:border-rose-500 hover:text-rose-600 transition-all font-black text-slate-800 shadow-sm text-sm"
                 >
                   Logout
                 </button>
                 <button 
                   onClick={handleSave}
-                  className="flex items-center gap-3 px-6 py-4 bg-white border-2 border-slate-200 rounded-[2rem] hover:border-indigo-500 transition-all font-black text-slate-800 shadow-sm hover:shadow-md group"
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-white border-2 border-slate-200 rounded-[2rem] hover:border-indigo-500 transition-all font-black text-slate-800 shadow-sm text-sm"
                 >
-                  <Save size={24} className={cn("text-slate-600 group-hover:text-indigo-600 transition-colors", showSaved && "text-emerald-500")} />
-                  {showSaved ? 'Saved!' : 'Save Progress'}
+                  <Save size={20} className={cn(showSaved && "text-emerald-500")} />
+                  {showSaved ? 'Saved!' : 'Save'}
                 </button>
                 <button 
                   onClick={() => setView('general-knowledge')}
-                  className="flex items-center gap-3 px-8 py-4 bg-indigo-600 rounded-[2rem] hover:bg-indigo-700 transition-all font-black text-white shadow-xl shadow-indigo-500/20 group"
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-white border-2 border-slate-200 rounded-[2rem] hover:border-indigo-500 transition-all font-black text-slate-800 shadow-sm text-sm"
                 >
-                  <Brain size={24} className="text-white group-hover:scale-110 transition-transform" />
-                  General Knowledge
+                  <Brain size={20} className="text-indigo-600" />
+                  Knowledge
+                </button>
+                <button 
+                  onClick={() => setView('general-cards')}
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-indigo-600 rounded-[2rem] hover:bg-indigo-700 transition-all font-black text-white shadow-xl shadow-indigo-500/20 text-sm"
+                >
+                  <Star size={20} className="fill-white" />
+                  General Cards
                 </button>
               </div>
             </header>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className={cn(
+              "grid gap-6",
+              deviceType === 'mobile' ? "grid-cols-1" : deviceType === 'tablet' ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            )}>
               {customLessons.map((lesson, index) => {
                 const unlocked = isLessonUnlocked(lesson.id);
                 const stars = getStarsCount(lesson.id);
@@ -536,6 +574,10 @@ export default function App() {
 
         {view === 'general-knowledge' && (
           <GeneralKnowledge onBack={() => setView('home')} />
+        )}
+
+        {view === 'general-cards' && (
+          <GeneralCards onBack={() => setView('home')} />
         )}
       </AnimatePresence>
     </div>

@@ -48,7 +48,26 @@ export const Assignment: React.FC<AssignmentProps> = ({ questions, onComplete, o
     });
   };
 
+  const calculateGrade = () => {
+    let totalScore = 0;
+    questions.forEach((q, i) => {
+      const studentWords = answers[i].toLowerCase().trim().split(/\s+/);
+      const correctWords = q.answer.toLowerCase().trim().split(/\s+/);
+      
+      let matches = 0;
+      correctWords.forEach(word => {
+        if (studentWords.includes(word)) matches++;
+      });
+      
+      const score = (matches / correctWords.length);
+      totalScore += score;
+    });
+    
+    return ((totalScore / questions.length) * 10).toFixed(1);
+  };
+
   if (showResults) {
+    const grade = calculateGrade();
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col overflow-y-auto">
         <div className="p-4 flex items-center justify-between border-b sticky top-0 bg-white z-10">
@@ -65,6 +84,9 @@ export const Assignment: React.FC<AssignmentProps> = ({ questions, onComplete, o
               <CheckCircle2 className="w-10 h-10 text-green-600" />
             </div>
             <h3 className="text-3xl font-bold text-gray-900">Assignment Completed!</h3>
+            <div className="inline-block px-6 py-2 bg-indigo-600 text-white rounded-full text-2xl font-black shadow-xl shadow-indigo-500/20">
+              Grade: {grade} / 10
+            </div>
             <p className="text-gray-600">Review your answers and see how you did.</p>
           </div>
 

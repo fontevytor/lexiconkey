@@ -111,6 +111,7 @@ interface AppState {
   userProgress: Record<string, Record<number, LessonProgress>>; // Key is username
   userNotes: Record<string, Record<string, CustomNote[]>>; // Key 1: username, Key 2: word
   userStats: Record<string, Record<string, VocabularyStats>>; // Key 1: username, Key 2: word
+  favoriteCards: Record<string, string[]>; // Key: username, Value: list of words
   customLessons: LessonData[];
   lastSaved: number;
   initialized: boolean;
@@ -128,6 +129,9 @@ interface AppState {
   updateVocabStats: (word: string, updates: Partial<VocabularyStats>) => Promise<void>;
   incrementViewCount: (word: string) => Promise<void>;
   updateLesson: (lessonId: number, updates: Partial<LessonData>) => Promise<void>;
+  addLesson: (lesson: LessonData) => Promise<void>;
+  reorderLessons: (newLessons: LessonData[]) => Promise<void>;
+  toggleFavoriteCard: (word: string) => void;
   saveProgress: () => void;
   initFirestore: () => () => void;
   syncUserData: (username: string, isTeacher: boolean) => () => void;
@@ -145,6 +149,7 @@ export const useAppStore = create<AppState>()(
       userProgress: {},
       userNotes: {},
       userStats: {},
+      favoriteCards: {},
       customLessons: LESSONS,
       lastSaved: Date.now(),
       initialized: false,
@@ -532,6 +537,51 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      addLesson: async (lesson) => {
+        set(state => ({
+          customLessons: [...state.customLessons, lesson]
+        }));
+
+        try {
+          await setDoc(doc(db, 'lessons', lesson.id.toString()), lesson);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, `lessons/${lesson.id}`);
+        }
+      },
+
+      reorderLessons: async (newLessons) => {
+        set({ customLessons: newLessons });
+        
+        // In a real app we might update a 'order' field, but here we'll just update all if needed
+        // or assume the list is fetched and sorted by an order field.
+        // For simplicity, we'll just update the local state and maybe a metadata doc in firestore.
+        try {
+          await setDoc(doc(db, 'metadata', 'lessonOrder'), { order: newLessons.map(l => l.id) });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, 'metadata/lessonOrder');
+        }
+      },
+
+      toggleFavoriteCard: (word) => {
+        const { currentUser } = get();
+        if (!currentUser) return;
+
+        set(state => {
+          const userFavorites = state.favoriteCards[currentUser] || [];
+          const isFavorite = userFavorites.includes(word);
+          const newFavorites = isFavorite 
+            ? userFavorites.filter(w => w !== word)
+            : [...userFavorites, word];
+          
+          return {
+            favoriteCards: {
+              ...state.favoriteCards,
+              [currentUser]: newFavorites
+            }
+          };
+        });
+      },
+
       saveProgress: () => {
         const { currentUser } = get();
         if (currentUser && currentUser !== 'teacher') {
@@ -548,6 +598,7 @@ export const useAppStore = create<AppState>()(
         userProgress: state.userProgress,
         userNotes: state.userNotes,
         userStats: state.userStats,
+        favoriteCards: state.favoriteCards,
       }),
     }
   )

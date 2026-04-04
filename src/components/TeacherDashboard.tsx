@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Save, Plus, Trash2, Edit2, CheckCircle2, Users, BookOpen as BookIcon, UserPlus, X, Brain } from 'lucide-react';
+import { ChevronLeft, Save, Plus, Trash2, Edit2, CheckCircle2, Users, BookOpen as BookIcon, UserPlus, X, Brain, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { LessonData, Vocabulary } from '../data/lessons';
 import { cn } from '../lib/utils';
@@ -13,6 +13,8 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
   const { 
     customLessons, 
     updateLesson, 
+    addLesson,
+    reorderLessons
   } = useAppStore();
   
   const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
@@ -72,6 +74,28 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     updateLesson(selectedLesson.id, { assignments: newAssignments });
   };
 
+  const handleAddLesson = () => {
+    const newId = Math.max(...customLessons.map(l => l.id), 0) + 1;
+    const newLesson: LessonData = {
+      id: newId,
+      title: `New Lesson ${newId}`,
+      vocabulary: [{ word: 'HELLO', translation: 'Olá' }],
+      phrases: ['HELLO WORLD'],
+      assignments: [{ question: 'How do you say hello?', answer: 'Hello' }]
+    };
+    addLesson(newLesson);
+    setSelectedLessonId(newId);
+  };
+
+  const handleMoveLesson = (index: number, direction: 'up' | 'down') => {
+    const newLessons = [...customLessons];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newLessons.length) return;
+    
+    [newLessons[index], newLessons[targetIndex]] = [newLessons[targetIndex], newLessons[index]];
+    reorderLessons(newLessons);
+  };
+
   const handleSave = () => {
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
@@ -106,25 +130,51 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Lesson List */}
-          <div className="lg:col-span-1 space-y-4">
-            <h2 className="text-xl font-black text-slate-800 mb-6 uppercase tracking-widest">Select Lesson</h2>
+          <div className="lg:col-span-1 space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">Lessons</h2>
+              <button 
+                onClick={handleAddLesson}
+                className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
+                title="Add New Lesson"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
             <div className="grid grid-cols-1 gap-3">
-              {customLessons.map((lesson) => (
-                <button
-                  key={lesson.id}
-                  onClick={() => setSelectedLessonId(lesson.id)}
-                  className={cn(
-                    "p-6 rounded-3xl border-2 text-left transition-all font-black",
-                    selectedLessonId === lesson.id
-                      ? "bg-white border-indigo-600 shadow-xl shadow-indigo-500/10 text-indigo-600"
-                      : "bg-white border-slate-100 text-slate-600 hover:border-slate-300"
-                  )}
-                >
-                  <div className="flex justify-between items-center">
-                    <span>{lesson.title}</span>
-                    <span className="text-xs opacity-50">ID: {lesson.id}</span>
+              {customLessons.map((lesson, index) => (
+                <div key={lesson.id} className="group relative">
+                  <button
+                    onClick={() => setSelectedLessonId(lesson.id)}
+                    className={cn(
+                      "w-full p-6 rounded-3xl border-2 text-left transition-all font-black pr-16",
+                      selectedLessonId === lesson.id
+                        ? "bg-white border-indigo-600 shadow-xl shadow-indigo-500/10 text-indigo-600"
+                        : "bg-white border-slate-100 text-slate-600 hover:border-slate-300"
+                    )}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="truncate">{lesson.title}</span>
+                      <span className="text-[10px] opacity-40 font-mono">ID:{lesson.id}</span>
+                    </div>
+                  </button>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleMoveLesson(index, 'up'); }}
+                      disabled={index === 0}
+                      className="p-1 hover:bg-slate-100 rounded-md disabled:opacity-20"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleMoveLesson(index, 'down'); }}
+                      disabled={index === customLessons.length - 1}
+                      className="p-1 hover:bg-slate-100 rounded-md disabled:opacity-20"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
