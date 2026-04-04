@@ -66,7 +66,9 @@ export default function App() {
     loginAsStudent,
     completeActivity,
     completeAssignment,
-    resetProgress
+    resetProgress,
+    exportProgressKey,
+    importProgressKey
   } = useAppStore();
 
   const [view, setView] = useState<View>('landing');
@@ -75,6 +77,11 @@ export default function App() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityType | null>(null);
   const [showSaved, setShowSaved] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showProgressKeyModal, setShowProgressKeyModal] = useState(false);
+  const [progressKeyInput, setProgressKeyInput] = useState('');
+  const [generatedKey, setGeneratedKey] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [importError, setImportError] = useState('');
   const [loginMode, setLoginMode] = useState<'student' | 'teacher' | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -390,6 +397,13 @@ export default function App() {
                   General Cards
                 </button>
                 <button 
+                  onClick={() => setShowProgressKeyModal(true)}
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-amber-50 border-2 border-amber-100 rounded-[2rem] hover:border-amber-500 hover:bg-amber-100 transition-all font-black text-amber-600 shadow-sm text-sm"
+                >
+                  <ShieldCheck size={20} />
+                  Progress Key
+                </button>
+                <button 
                   onClick={() => setShowResetConfirm(true)}
                   className="flex items-center justify-center gap-2 px-6 py-4 bg-rose-50 border-2 border-rose-100 rounded-[2rem] hover:border-rose-500 hover:bg-rose-100 transition-all font-black text-rose-600 shadow-sm text-sm"
                 >
@@ -398,6 +412,105 @@ export default function App() {
                 </button>
               </div>
             </header>
+
+            <AnimatePresence>
+              {showProgressKeyModal && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden"
+                  >
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center">
+                          <ShieldCheck size={24} className="text-amber-600" />
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Progress Key</h3>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setShowProgressKeyModal(false);
+                          setGeneratedKey('');
+                          setProgressKeyInput('');
+                          setImportError('');
+                        }}
+                        className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Export Progress</h4>
+                        <p className="text-slate-600 text-sm mb-4 font-medium">Generate a key to save your progress manually or transfer to another device.</p>
+                        {generatedKey ? (
+                          <div className="space-y-3">
+                            <div className="p-4 bg-white border border-slate-200 rounded-2xl break-all font-mono text-xs text-slate-600 max-h-32 overflow-y-auto">
+                              {generatedKey}
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(generatedKey);
+                                setCopySuccess(true);
+                                setTimeout(() => setCopySuccess(false), 2000);
+                              }}
+                              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors"
+                            >
+                              {copySuccess ? <CheckCircle2 size={18} /> : <Save size={18} />}
+                              {copySuccess ? 'Copied!' : 'Copy to Clipboard'}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setGeneratedKey(exportProgressKey())}
+                            className="w-full py-3 bg-white border-2 border-amber-200 text-amber-700 rounded-xl font-black hover:bg-amber-50 transition-colors"
+                          >
+                            Generate New Key
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Import Progress</h4>
+                        <p className="text-slate-600 text-sm mb-4 font-medium">Paste your progress key below to restore your data.</p>
+                        <textarea
+                          value={progressKeyInput}
+                          onChange={(e) => setProgressKeyInput(e.target.value)}
+                          placeholder="Paste your key here..."
+                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-mono text-xs text-slate-600 h-24 outline-none focus:border-indigo-500 transition-all resize-none"
+                        />
+                        {importError && <p className="text-rose-500 text-xs font-bold mt-2">{importError}</p>}
+                        <button
+                          onClick={() => {
+                            const success = importProgressKey(progressKeyInput);
+                            if (success) {
+                              setShowProgressKeyModal(false);
+                              setProgressKeyInput('');
+                              setImportError('');
+                              // Refresh view
+                              setView('home');
+                            } else {
+                              setImportError('Invalid progress key. Please check and try again.');
+                            }
+                          }}
+                          className="w-full py-3 bg-slate-900 text-white rounded-xl font-black mt-4 hover:bg-slate-800 transition-colors"
+                        >
+                          Load Progress
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <AnimatePresence>
               {showResetConfirm && (

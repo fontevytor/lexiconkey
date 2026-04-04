@@ -73,6 +73,11 @@ service cloud.firestore {
         allow read, write: if isAdmin() || isOwner(username);
       }
     }
+
+    match /metadata/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     
     match /test/connection {
       allow read: if true;

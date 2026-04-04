@@ -159,6 +159,8 @@ interface AppState {
   syncUserData: (username: string, isTeacher: boolean) => () => void;
   loginAsTeacher: () => Promise<void>;
   loginAsStudent: (username: string) => Promise<void>;
+  exportProgressKey: () => string;
+  importProgressKey: (key: string) => boolean;
 }
 
 export const useAppStore = create<AppState>()(
@@ -756,6 +758,54 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             handleFirestoreError(err, OperationType.DELETE, `studentActivity/${currentUser}`);
           }
+        }
+      },
+
+      exportProgressKey: () => {
+        const state = get();
+        const data = {
+          studentActivity: state.studentActivity,
+          userProgress: state.userProgress,
+          userNotes: state.userNotes,
+          userStats: state.userStats,
+          favoriteCards: state.favoriteCards,
+          memoryMasterScore: state.memoryMasterScore,
+          wordOfTheDay: state.wordOfTheDay,
+          lastSaved: Date.now()
+        };
+        try {
+          const json = JSON.stringify(data);
+          // Use btoa with encodeURIComponent for UTF-8 support
+          return btoa(unescape(encodeURIComponent(json)));
+        } catch (e) {
+          console.error('Export failed', e);
+          return '';
+        }
+      },
+
+      importProgressKey: (key: string) => {
+        try {
+          const json = decodeURIComponent(escape(atob(key)));
+          const data = JSON.parse(json);
+          
+          // Basic validation
+          if (!data.studentActivity || !data.userProgress) return false;
+
+          set(state => ({
+            ...state,
+            studentActivity: { ...state.studentActivity, ...data.studentActivity },
+            userProgress: { ...state.userProgress, ...data.userProgress },
+            userNotes: { ...state.userNotes, ...data.userNotes },
+            userStats: { ...state.userStats, ...data.userStats },
+            favoriteCards: { ...state.favoriteCards, ...data.favoriteCards },
+            memoryMasterScore: { ...state.memoryMasterScore, ...data.memoryMasterScore },
+            wordOfTheDay: { ...state.wordOfTheDay, ...data.wordOfTheDay },
+            lastSaved: Date.now()
+          }));
+          return true;
+        } catch (e) {
+          console.error('Import failed', e);
+          return false;
         }
       },
     }),
