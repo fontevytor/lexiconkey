@@ -12,8 +12,10 @@ import {
   query, 
   where,
   updateDoc,
-  getDoc
+  getDoc,
+  collectionGroup
 } from 'firebase/firestore';
+import { signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 interface CustomNote {
   id: string;
@@ -77,6 +79,9 @@ interface AppState {
   updateLesson: (lessonId: number, updates: Partial<LessonData>) => Promise<void>;
   saveProgress: () => void;
   initFirestore: () => () => void;
+  syncUserData: (username: string, isTeacher: boolean) => () => void;
+  loginAsTeacher: () => Promise<void>;
+  loginAsStudent: (username: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>()(
@@ -100,17 +105,24 @@ export const useAppStore = create<AppState>()(
 
         const unsubscribers: (() => void)[] = [];
 
-        // Sync Student Accounts
+        // Listen for auth state changes
+        const authUnsub = onAuthStateChanged(auth, (user) => {
+          // If we have a user, we might need to re-sync or just update state
+          // But we don't trigger syncUserData here, App.tsx handles it
+          set({ initialized: true });
+        });
+        unsubscribers.push(authUnsub);
+
+        // Sync Student Accounts (Publicly readable per rules)
         unsubscribers.push(onSnapshot(collection(db, 'studentAccounts'), (snapshot) => {
           const accounts: StudentAccount[] = [];
           snapshot.forEach(doc => accounts.push(doc.data() as StudentAccount));
           set({ studentAccounts: accounts });
         }));
 
-        // Sync Lessons
+        // Sync Lessons (Publicly readable per rules)
         unsubscribers.push(onSnapshot(collection(db, 'lessons'), (snapshot) => {
           if (snapshot.empty) {
-            // If no lessons in Firestore, upload default ones once
             LESSONS.forEach(l => setDoc(doc(db, 'lessons', l.id.toString()), l));
           } else {
             const lessons: LessonData[] = [];
@@ -119,60 +131,148 @@ export const useAppStore = create<AppState>()(
           }
         }));
 
-        // Sync Student Activity
-        unsubscribers.push(onSnapshot(collection(db, 'studentActivity'), (snapshot) => {
-          const activity: Record<string, StudentActivity> = {};
-          snapshot.forEach(doc => activity[doc.id] = doc.data() as StudentActivity);
-          set({ studentActivity: activity });
-        }));
-
-        // Sync User Progress
-        unsubscribers.push(onSnapshot(collection(db, 'userProgress'), (snapshot) => {
-          // This is a bit more complex because of nested structure
-          // We'll fetch all progress docs
-          snapshot.forEach(async (userDoc) => {
-            const username = userDoc.id;
-            const lessonsSnapshot = await getDocs(collection(db, `userProgress/${username}/lessons`));
-            const progress: Record<number, LessonProgress> = {};
-            lessonsSnapshot.forEach(lDoc => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
-            set(state => ({
-              userProgress: { ...state.userProgress, [username]: progress }
-            }));
-          });
-        }));
-
-        // Sync User Notes
-        unsubscribers.push(onSnapshot(collection(db, 'userNotes'), (snapshot) => {
-          snapshot.forEach(async (userDoc) => {
-            const username = userDoc.id;
-            const notesSnapshot = await getDocs(collection(db, `userNotes/${username}/notes`));
-            const notes: Record<string, CustomNote[]> = {};
-            notesSnapshot.forEach(nDoc => {
-              const note = nDoc.data() as CustomNote & { word: string };
-              if (!notes[note.word]) notes[note.word] = [];
-              notes[note.word].push(note);
-            });
-            set(state => ({
-              userNotes: { ...state.userNotes, [username]: notes }
-            }));
-          });
-        }));
-
-        // Sync User Stats
-        unsubscribers.push(onSnapshot(collection(db, 'userStats'), (snapshot) => {
-          snapshot.forEach(async (userDoc) => {
-            const username = userDoc.id;
-            const statsSnapshot = await getDocs(collection(db, `userStats/${username}/words`));
-            const stats: Record<string, VocabularyStats> = {};
-            statsSnapshot.forEach(sDoc => stats[sDoc.id] = sDoc.data() as VocabularyStats);
-            set(state => ({
-              userStats: { ...state.userStats, [username]: stats }
-            }));
-          });
-        }));
-
-        set({ initialized: true });
         return () => unsubscribers.forEach(unsub => unsub());
+      },
+
+      syncUserData: (username, isTeacher) => {
+        const unsubscribers: (() => void)[] = [];
+
+        // Helper to wait for auth if needed
+        const startSync = () => {
+          if (!auth.currentUser) return;
+
+          if (isTeacher) {
+            // Teacher syncs everything
+            unsubscribers.push(onSnapshot(collection(db, 'studentActivity'), (snapshot) => {
+              const activity: Record<string, StudentActivity> = {};
+              snapshot.forEach(doc => activity[doc.id] = doc.data() as StudentActivity);
+              set({ studentActivity: activity });
+            }));
+
+            unsubscribers.push(onSnapshot(collection(db, 'userProgress'), (snapshot) => {
+              snapshot.forEach(async (userDoc) => {
+                const uname = userDoc.id;
+                const lessonsSnapshot = await getDocs(collection(db, `userProgress/${uname}/lessons`));
+                const progress: Record<number, LessonProgress> = {};
+                lessonsSnapshot.forEach(lDoc => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
+                set(state => ({
+                  userProgress: { ...state.userProgress, [uname]: progress }
+                }));
+              });
+            }));
+
+            unsubscribers.push(onSnapshot(collection(db, 'userNotes'), (snapshot) => {
+              snapshot.forEach(async (userDoc) => {
+                const uname = userDoc.id;
+                const notesSnapshot = await getDocs(collection(db, `userNotes/${uname}/notes`));
+                const notes: Record<string, CustomNote[]> = {};
+                notesSnapshot.forEach(nDoc => {
+                  const note = nDoc.data() as CustomNote & { word: string };
+                  if (!notes[note.word]) notes[note.word] = [];
+                  notes[note.word].push(note);
+                });
+                set(state => ({
+                  userNotes: { ...state.userNotes, [uname]: notes }
+                }));
+              });
+            }));
+
+            unsubscribers.push(onSnapshot(collection(db, 'userStats'), (snapshot) => {
+              snapshot.forEach(async (userDoc) => {
+                const uname = userDoc.id;
+                const statsSnapshot = await getDocs(collection(db, `userStats/${uname}/words`));
+                const stats: Record<string, VocabularyStats> = {};
+                statsSnapshot.forEach(sDoc => stats[sDoc.id] = sDoc.data() as VocabularyStats);
+                set(state => ({
+                  userStats: { ...state.userStats, [uname]: stats }
+                }));
+              });
+            }));
+          } else {
+            // Student syncs only their own data
+            unsubscribers.push(onSnapshot(doc(db, 'studentActivity', username), (doc) => {
+              if (doc.exists()) {
+                set(state => ({
+                  studentActivity: { ...state.studentActivity, [username]: doc.data() as StudentActivity }
+                }));
+              }
+            }));
+
+            unsubscribers.push(onSnapshot(collection(db, `userProgress/${username}/lessons`), (snapshot) => {
+              const progress: Record<number, LessonProgress> = {};
+              snapshot.forEach(lDoc => progress[Number(lDoc.id)] = lDoc.data() as LessonProgress);
+              set(state => ({
+                userProgress: { ...state.userProgress, [username]: progress }
+              }));
+            }));
+
+            unsubscribers.push(onSnapshot(collection(db, `userNotes/${username}/notes`), (snapshot) => {
+              const notes: Record<string, CustomNote[]> = {};
+              snapshot.forEach(nDoc => {
+                const note = nDoc.data() as CustomNote & { word: string };
+                if (!notes[note.word]) notes[note.word] = [];
+                notes[note.word].push(note);
+              });
+              set(state => ({
+                userNotes: { ...state.userNotes, [username]: notes }
+              }));
+            }));
+
+            unsubscribers.push(onSnapshot(collection(db, `userStats/${username}/words`), (snapshot) => {
+              const stats: Record<string, VocabularyStats> = {};
+              snapshot.forEach(sDoc => stats[sDoc.id] = sDoc.data() as VocabularyStats);
+              set(state => ({
+                userStats: { ...state.userStats, [username]: stats }
+              }));
+            }));
+          }
+        };
+
+        // If already auth, start immediately
+        if (auth.currentUser) {
+          startSync();
+        } else {
+          // Otherwise wait for auth
+          const authUnsub = onAuthStateChanged(auth, (user) => {
+            if (user) {
+              startSync();
+              authUnsub(); // Only need to trigger once
+            }
+          });
+          unsubscribers.push(authUnsub);
+        }
+
+        return () => unsubscribers.forEach(unsub => unsub());
+      },
+
+      loginAsTeacher: async () => {
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        if (result.user.email === 'fontevytor@gmail.com') {
+          set({ userType: 'teacher', currentUser: 'teacher' });
+        } else {
+          await auth.signOut();
+          throw new Error('Unauthorized teacher email');
+        }
+      },
+
+      loginAsStudent: async (username) => {
+        try {
+          if (!auth.currentUser) {
+            await signInAnonymously(auth);
+          }
+        } catch (err: any) {
+          if (err.code === 'auth/admin-restricted-operation') {
+            throw new Error('Anonymous authentication is disabled in Firebase Console. Please enable it or contact the administrator.');
+          }
+          throw err;
+        }
+        
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          await updateDoc(doc(db, 'studentAccounts', username), { uid });
+        }
+        set({ userType: 'student', currentUser: username });
       },
 
       addStudent: async (student) => {

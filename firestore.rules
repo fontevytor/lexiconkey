@@ -10,46 +10,71 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/studentAccounts/$(request.auth.uid)).data.role == 'admin' || 
-         (request.auth.token.email == "fontevytor@gmail.com" && request.auth.token.email_verified == true));
+        (request.auth.token.email == "fontevytor@gmail.com" && request.auth.token.email_verified == true);
     }
 
     function isOwner(username) {
-      return isAuthenticated() && (request.auth.uid == username || request.auth.token.name == username);
+      return isAuthenticated() && (
+        request.auth.uid == username || 
+        (exists(/databases/$(database)/documents/studentAccounts/$(username)) && 
+         get(/databases/$(database)/documents/studentAccounts/$(username)).data.uid == request.auth.uid)
+      );
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
-    match /studentAccounts/{username} {
-      allow read: if true; // Needed for login check
-      allow write: if isAdmin();
-    }
-
-    match /lessons/{lessonId} {
+    match /studentAccounts {
       allow read: if true;
       allow write: if isAdmin();
+      match /{username} {
+        allow read: if true; 
+        allow create: if isAdmin();
+        allow update: if isAdmin() || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid']));
+        allow delete: if isAdmin();
+      }
     }
 
-    match /userProgress/{username}/{document=**} {
-      allow read: if isAdmin() || isOwner(username);
-      allow write: if isAdmin() || isOwner(username);
+    match /lessons {
+      allow read: if true;
+      allow write: if isAdmin();
+      match /{lessonId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
-    match /userNotes/{username}/{document=**} {
-      allow read: if isAdmin() || isOwner(username);
-      allow write: if isAdmin() || isOwner(username);
+    match /userProgress {
+      allow read: if isAdmin();
+      match /{username}/{document=**} {
+        allow read: if isAdmin() || isOwner(username);
+        allow write: if isAdmin() || isOwner(username);
+      }
     }
 
-    match /userStats/{username}/{document=**} {
-      allow read: if isAdmin() || isOwner(username);
-      allow write: if isAdmin() || isOwner(username);
+    match /userNotes {
+      allow read: if isAdmin();
+      match /{username}/{document=**} {
+        allow read: if isAdmin() || isOwner(username);
+        allow write: if isAdmin() || isOwner(username);
+      }
     }
 
-    match /studentActivity/{username} {
-      allow read: if isAdmin() || isOwner(username);
-      allow write: if isAdmin() || isOwner(username);
+    match /userStats {
+      allow read: if isAdmin();
+      match /{username}/{document=**} {
+        allow read: if isAdmin() || isOwner(username);
+        allow write: if isAdmin() || isOwner(username);
+      }
+    }
+
+    match /studentActivity {
+      allow read: if isAdmin();
+      match /{username} {
+        allow read: if isAdmin() || isOwner(username);
+        allow write: if isAdmin() || isOwner(username);
+      }
     }
     
     match /test/connection {

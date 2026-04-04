@@ -51,7 +51,10 @@ export default function App() {
     userProgress,
     customLessons,
     initialized,
-    initFirestore
+    initFirestore,
+    syncUserData,
+    loginAsTeacher,
+    loginAsStudent
   } = useAppStore();
 
   const [view, setView] = useState<View>('landing');
@@ -62,11 +65,20 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const unsub = initFirestore();
     return () => unsub();
   }, [initFirestore]);
+
+  // Sync user data effect
+  useEffect(() => {
+    if (initialized && currentUser) {
+      const unsub = syncUserData(currentUser, currentUser === 'teacher');
+      return () => unsub();
+    }
+  }, [initialized, currentUser, syncUserData]);
 
   // If user was already logged in (from persist), make sure they are in the right view
   useEffect(() => {
@@ -95,26 +107,30 @@ export default function App() {
     );
   }
 
-  const handleLogin = () => {
-    if (loginMode === 'teacher') {
-      if (username === 'teacher' && password === 'adminadminadmin123') {
-        setUserType('teacher');
-        setCurrentUser('teacher');
-        setView('teacher');
-        setError('');
-      } else {
-        setError('Invalid teacher credentials');
+  const handleLogin = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      if (loginMode === 'teacher') {
+        if (username === 'teacher' && password === 'adminadminadmin123') {
+          await loginAsTeacher();
+          setView('teacher');
+        } else {
+          setError('Invalid teacher credentials');
+        }
+      } else if (loginMode === 'student') {
+        const student = studentAccounts.find(s => s.username === username && s.password === password);
+        if (student) {
+          await loginAsStudent(username);
+          setView('home');
+        } else {
+          setError('Invalid student credentials');
+        }
       }
-    } else if (loginMode === 'student') {
-      const student = studentAccounts.find(s => s.username === username && s.password === password);
-      if (student) {
-        setUserType('student');
-        setCurrentUser(username);
-        setView('home');
-        setError('');
-      } else {
-        setError('Invalid student credentials');
-      }
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -258,9 +274,19 @@ export default function App() {
 
                     <button 
                       onClick={handleLogin}
-                      className="w-full py-5 bg-white text-indigo-600 rounded-[2rem] font-black text-xl shadow-2xl hover:scale-105 active:scale-95 transition-all mt-4"
+                      disabled={isLoading}
+                      className="w-full py-5 bg-white text-indigo-600 rounded-[2rem] font-black text-xl shadow-2xl hover:scale-105 active:scale-95 transition-all mt-4 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-3"
                     >
-                      Login
+                      {isLoading ? (
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        >
+                          <Zap size={24} />
+                        </motion.div>
+                      ) : (
+                        'Login'
+                      )}
                     </button>
                   </div>
                 </div>
