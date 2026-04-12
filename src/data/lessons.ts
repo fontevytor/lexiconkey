@@ -12,6 +12,7 @@ export interface AssignmentQuestion {
 export interface LessonData {
   id: number;
   title: string;
+  subtitle?: string;
   vocabulary: Vocabulary[];
   phrases: string[];
   assignments?: AssignmentQuestion[];

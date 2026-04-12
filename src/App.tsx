@@ -24,15 +24,18 @@ import {
   Keyboard,
   ClipboardList,
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Bot
 } from 'lucide-react';
 import { LESSONS, LessonData } from './data/lessons';
 import { useAppStore } from './store/useAppStore';
 import { cn } from './lib/utils';
 import Flashcards from './components/Flashcards';
-import BubbleGame from './components/BubbleGame';
 import Hangman from './components/Hangman';
 import { WordScramble } from './components/WordScramble';
+import PhraseUnscramble from './components/PhraseUnscramble';
+import WordSearch from './components/WordSearch';
+import Conversation from './components/Conversation';
 import PianoFail from './components/PianoFail';
 import GeneralKnowledge from './components/GeneralKnowledge';
 import TeacherDashboard from './components/TeacherDashboard';
@@ -40,8 +43,8 @@ import { Assignment } from './components/Assignment';
 import GeneralCards from './components/GeneralCards';
 import LessonVerbs from './components/LessonVerbs';
 
-type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher' | 'general-cards' | 'verbs';
-type ActivityType = 'flashcards' | 'bubble' | 'hangman' | 'scramble' | 'piano';
+type View = 'landing' | 'home' | 'lesson-detail' | 'activity' | 'assignment' | 'general-knowledge' | 'teacher' | 'general-cards' | 'verbs' | 'conversation' | 'word-search';
+type ActivityType = 'flashcards' | 'phraseUnscramble' | 'hangman' | 'scramble' | 'piano';
 type DeviceType = 'mobile' | 'tablet' | 'desktop';
 
 import WordOfTheDay from './components/WordOfTheDay';
@@ -204,7 +207,7 @@ export default function App() {
 
     switch (selectedActivity) {
       case 'flashcards': return <Flashcards {...props} onComplete={() => { completeActivity(selectedLesson.id, 'flashcards'); setView('lesson-detail'); }} />;
-      case 'bubble': return <BubbleGame {...props} onComplete={() => { completeActivity(selectedLesson.id, 'bubble'); setView('lesson-detail'); }} />;
+      case 'phraseUnscramble': return <PhraseUnscramble {...props} onComplete={() => { completeActivity(selectedLesson.id, 'phraseUnscramble'); setView('lesson-detail'); }} />;
       case 'hangman': return <Hangman {...props} onComplete={() => { completeActivity(selectedLesson.id, 'hangman'); setView('lesson-detail'); }} />;
       case 'scramble': return <WordScramble lesson={selectedLesson} onComplete={() => { completeActivity(selectedLesson.id, 'scramble'); setView('lesson-detail'); }} onClose={() => setView('lesson-detail')} />;
       case 'piano': return <PianoFail {...props} onComplete={() => { completeActivity(selectedLesson.id, 'piano'); setView('lesson-detail'); }} />;
@@ -405,6 +408,13 @@ export default function App() {
                 >
                   <Star size={20} className="fill-white" />
                   General Cards
+                </button>
+                <button 
+                  onClick={() => setView('conversation')}
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-emerald-600 rounded-[2rem] hover:bg-emerald-700 transition-all font-black text-white shadow-xl shadow-emerald-500/20 text-sm"
+                >
+                  <Bot size={20} />
+                  Conversation
                 </button>
                 <button 
                   onClick={() => setShowProgressKeyModal(true)}
@@ -628,6 +638,11 @@ export default function App() {
                       <h3 className="text-2xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors leading-tight">
                         {lesson.title}
                       </h3>
+                      {lesson.subtitle && (
+                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-2">
+                          {lesson.subtitle}
+                        </p>
+                      )}
                       <p className="text-slate-600 font-medium text-sm">
                         {lesson.vocabulary.length} words to master
                       </p>
@@ -669,7 +684,12 @@ export default function App() {
             </div>
 
             <div className="mb-12">
-              <h2 className="text-5xl font-black text-slate-900 mb-3 tracking-tighter">{selectedLesson.title}</h2>
+              <h2 className="text-5xl font-black text-slate-900 mb-1 tracking-tighter">{selectedLesson.title}</h2>
+              {selectedLesson.subtitle && (
+                <p className="text-indigo-600 font-black text-sm uppercase tracking-[0.2em] mb-4">
+                  {selectedLesson.subtitle}
+                </p>
+              )}
               <div className="flex gap-1.5">
                 {[...Array(5)].map((_, i) => (
                   <Star 
@@ -691,13 +711,13 @@ export default function App() {
                 color="bg-rose-50"
               />
               <ActivityCard 
-                title="Bubble Shooter" 
-                desc="Shoot letters to form words" 
+                title="Phrase Unscramble" 
+                desc="Unscramble phrases from the lesson" 
                 icon={<Target className="text-sky-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.bubble : false}
-                onClick={() => handleActivitySelect('bubble')}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.phraseUnscramble : false}
+                onClick={() => handleActivitySelect('phraseUnscramble')}
                 color="bg-sky-50"
-                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.bubble?.level : undefined}
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.phraseUnscramble?.level : undefined}
               />
               <ActivityCard 
                 title="Hangman" 
@@ -732,6 +752,13 @@ export default function App() {
                 icon={<Zap className="text-indigo-600" />}
                 onClick={() => setView('verbs')}
                 color="bg-indigo-50"
+              />
+              <ActivityCard 
+                title="Word Search" 
+                desc="Find hidden words (Fun mode)" 
+                icon={<Target size={20} className="text-amber-500" />}
+                onClick={() => setView('word-search')}
+                color="bg-amber-50"
               />
               <div className="md:col-span-2">
                 <ActivityCard 
@@ -783,6 +810,14 @@ export default function App() {
             onComplete={() => setView('lesson-detail')}
             onBack={() => setView('lesson-detail')}
           />
+        )}
+
+        {view === 'conversation' && (
+          <Conversation onBack={() => setView('home')} />
+        )}
+
+        {view === 'word-search' && selectedLesson && (
+          <WordSearch lesson={selectedLesson} onClose={() => setView('lesson-detail')} />
         )}
       </AnimatePresence>
     </div>

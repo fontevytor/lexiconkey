@@ -79,7 +79,7 @@ interface CustomNote {
 interface LessonProgress {
   stars: {
     flashcards: boolean;
-    bubble: boolean;
+    phraseUnscramble: boolean;
     hangman: boolean;
     scramble: boolean;
     piano: boolean;
@@ -101,7 +101,7 @@ interface StudentAccount {
 }
 
 interface GameState {
-  bubble?: { level: number; score: number };
+  phraseUnscramble?: { level: number; score: number };
   scramble?: { level: number };
   hangman?: { level: number };
   piano?: { level: number };
@@ -114,6 +114,11 @@ interface StudentActivity {
   gameProgress: Record<number, GameState>; // Key is lessonId
   streak: number;
   lastActivityAt: number;
+  conversationXP: number;
+  conversationLevel: number;
+  totalConversationTime: number; // in seconds
+  conversationTotalScore: number;
+  conversationTotalAnswers: number;
 }
 
 interface WordOfTheDay {
@@ -151,6 +156,7 @@ interface AppState {
   updateUserNote: (username: string, word: string, noteId: string, updates: Partial<CustomNote>) => Promise<void>;
   updateVocabStats: (word: string, updates: Partial<VocabularyStats>) => Promise<void>;
   incrementViewCount: (word: string) => Promise<void>;
+  updateConversationStats: (xpGain: number, timeGain: number, score?: number) => Promise<void>;
   recordActivity: () => Promise<void>;
   updateLesson: (lessonId: number, updates: Partial<LessonData>) => Promise<void>;
   addLesson: (lesson: LessonData) => Promise<void>;
@@ -329,7 +335,12 @@ export const useAppStore = create<AppState>()(
           lastSaved: Date.now(), 
           gameProgress: {},
           streak: 0,
-          lastActivityAt: Date.now()
+          lastActivityAt: Date.now(),
+          conversationXP: 0,
+          conversationLevel: 1,
+          totalConversationTime: 0,
+          conversationTotalScore: 0,
+          conversationTotalAnswers: 0
         };
         const updated = { ...current, ...activity, lastSaved: Date.now() };
         
@@ -353,7 +364,12 @@ export const useAppStore = create<AppState>()(
           lastSaved: now, 
           gameProgress: {},
           streak: 0,
-          lastActivityAt: now
+          lastActivityAt: now,
+          conversationXP: 0,
+          conversationLevel: 1,
+          totalConversationTime: 0,
+          conversationTotalScore: 0,
+          conversationTotalAnswers: 0
         };
 
         const twelveHours = 12 * 60 * 60 * 1000;
@@ -386,7 +402,12 @@ export const useAppStore = create<AppState>()(
           gameProgress: {}, 
           lastSaved: Date.now(),
           streak: 0,
-          lastActivityAt: Date.now()
+          lastActivityAt: Date.now(),
+          conversationXP: 0,
+          conversationLevel: 1,
+          totalConversationTime: 0,
+          conversationTotalScore: 0,
+          conversationTotalAnswers: 0
         };
         const lessonProgress = currentActivity.gameProgress[lessonId] || {};
         
@@ -414,13 +435,13 @@ export const useAppStore = create<AppState>()(
 
         const currentProgressMap = get().userProgress[currentUser] || {
           1: {
-            stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
+            stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
             unlocked: true,
           }
         };
         
         const currentProgress = currentProgressMap[lessonId] || {
-          stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
+          stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
           unlocked: lessonId === 1,
         };
 
@@ -435,7 +456,7 @@ export const useAppStore = create<AppState>()(
           const nextId = lessonId + 1;
           if (!newUserProgress[nextId]) {
             newUserProgress[nextId] = {
-              stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
+              stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
               unlocked: true,
             };
           } else {
@@ -462,7 +483,7 @@ export const useAppStore = create<AppState>()(
 
         const currentProgressMap = get().userProgress[currentUser] || {};
         const currentProgress = currentProgressMap[lessonId] || {
-          stars: { flashcards: false, bubble: false, hangman: false, scramble: false, piano: false },
+          stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
           unlocked: lessonId === 1,
         };
 
@@ -634,6 +655,55 @@ export const useAppStore = create<AppState>()(
         if (get().userType === 'teacher') {
           await setDoc(doc(db, `userStats/${currentUser}/words`, word), updated);
         }
+      },
+
+      updateConversationStats: async (xpGain, timeGain, score) => {
+        const { currentUser, studentActivity } = get();
+        if (!currentUser || currentUser === 'teacher') return;
+
+        const current = studentActivity[currentUser] || {
+          lessonId: 1,
+          wordIndex: 0,
+          lastSaved: Date.now(),
+          gameProgress: {},
+          streak: 0,
+          lastActivityAt: Date.now(),
+          conversationXP: 0,
+          conversationLevel: 1,
+          totalConversationTime: 0,
+          conversationTotalScore: 0,
+          conversationTotalAnswers: 0
+        };
+
+        // Ensure defaults for existing objects that might lack these fields
+        const xp = current.conversationXP ?? 0;
+        const level = current.conversationLevel ?? 1;
+        const totalTime = current.totalConversationTime ?? 0;
+        const totalScore = current.conversationTotalScore ?? 0;
+        const totalAnswers = current.conversationTotalAnswers ?? 0;
+
+        let newXP = xp + xpGain;
+        let newLevel = level;
+        
+        // Level up logic: 100 XP per level
+        const xpPerLevel = 100;
+        while (newXP >= xpPerLevel) {
+          newXP -= xpPerLevel;
+          newLevel += 1;
+        }
+
+        const updates: Partial<StudentActivity> = {
+          conversationXP: newXP,
+          conversationLevel: newLevel,
+          totalConversationTime: totalTime + timeGain
+        };
+
+        if (score !== undefined) {
+          updates.conversationTotalScore = totalScore + score;
+          updates.conversationTotalAnswers = totalAnswers + 1;
+        }
+
+        await get().updateStudentActivity(currentUser, updates);
       },
 
       updateLesson: async (lessonId, updates) => {

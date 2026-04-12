@@ -27,6 +27,11 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     updateLesson(selectedLesson.id, { title });
   };
 
+  const handleUpdateLessonSubtitle = (subtitle: string) => {
+    if (!selectedLesson) return;
+    updateLesson(selectedLesson.id, { subtitle });
+  };
+
   const handleUpdateVocabulary = (index: number, updates: Partial<Vocabulary>) => {
     if (!selectedLesson) return;
     const newVocab = [...selectedLesson.vocabulary];
@@ -209,14 +214,26 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
                 {/* Lesson Details */}
                 <div className="bg-white rounded-[3rem] border-2 border-slate-100 p-8 shadow-sm">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-                    <div className="flex-1 space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lesson Title</label>
-                      <input 
-                        type="text"
-                        value={selectedLesson.title}
-                        onChange={(e) => handleUpdateLessonTitle(e.target.value)}
-                        className="text-3xl font-black text-slate-900 tracking-tight bg-transparent border-b-2 border-transparent focus:border-indigo-600 outline-none w-full"
-                      />
+                    <div className="flex-1 space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lesson Title</label>
+                        <input 
+                          type="text"
+                          value={selectedLesson.title}
+                          onChange={(e) => handleUpdateLessonTitle(e.target.value)}
+                          className="text-3xl font-black text-slate-900 tracking-tight bg-transparent border-b-2 border-transparent focus:border-indigo-600 outline-none w-full"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lesson Subtitle</label>
+                        <input 
+                          type="text"
+                          value={selectedLesson.subtitle || ''}
+                          onChange={(e) => handleUpdateLessonSubtitle(e.target.value)}
+                          className="text-lg font-bold text-indigo-600 tracking-tight bg-transparent border-b-2 border-transparent focus:border-indigo-600 outline-none w-full"
+                          placeholder="e.g. Basic Fruits and Colors"
+                        />
+                      </div>
                     </div>
                     <button 
                       onClick={handleAddWord}

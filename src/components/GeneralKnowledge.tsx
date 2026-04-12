@@ -21,7 +21,8 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
     updateVocabStats, 
     incrementViewCount,
     updateStudentActivity,
-    favoriteCards
+    favoriteCards,
+    customLessons
   } = useAppStore();
 
   const [view, setView] = useState<'selection' | 'list'>('selection');
@@ -39,7 +40,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
   const currentUserStats = (currentUser && userStats[currentUser]) || {};
   const favorites = (currentUser && favoriteCards[currentUser]) || [];
 
-  const unlockedVocabulary = LESSONS
+  const unlockedVocabulary = customLessons
     .filter(lesson => isLessonUnlocked(lesson.id))
     .flatMap(lesson => {
       const vocab = lesson.vocabulary.map(v => ({ ...v, lessonId: lesson.id }));
@@ -81,7 +82,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
     setSelectedWord(item);
     incrementViewCount(item.word);
     if (currentUser && currentUser !== 'teacher') {
-      const wordIndex = item.lessonId ? LESSONS.find(l => l.id === item.lessonId)?.vocabulary.findIndex(v => v.word === item.word) : 0;
+      const wordIndex = item.lessonId ? customLessons.find(l => l.id === item.lessonId)?.vocabulary.findIndex(v => v.word === item.word) : 0;
       updateStudentActivity(currentUser, { 
         lessonId: item.lessonId, 
         wordIndex: wordIndex !== -1 ? wordIndex : 0 

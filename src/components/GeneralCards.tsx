@@ -35,6 +35,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showRatingSelector, setShowRatingSelector] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -67,6 +68,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
   const handleNext = () => {
     setIsFlipped(false);
     setShowRatingSelector(false);
+    setShowNotes(false);
     setCurrentIndex((currentIndex + 1) % pool.length);
   };
 
@@ -125,17 +127,6 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
             </div>
             <h3 className="text-4xl font-black text-slate-900 mb-2">Favorited Words</h3>
             <p className="text-slate-500 font-medium text-lg">Review all vocabulary you've marked as favorites.</p>
-          </button>
-
-          <button
-            onClick={() => { setFilterType('practice'); setView('cards'); setCurrentIndex(0); }}
-            className="group p-12 bg-white border-4 border-slate-100 rounded-[4rem] hover:border-amber-500 hover:shadow-2xl hover:shadow-amber-500/10 transition-all text-left relative overflow-hidden md:col-span-2"
-          >
-            <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
-              <HelpCircle size={40} />
-            </div>
-            <h3 className="text-4xl font-black text-slate-900 mb-2">Custom Practices</h3>
-            <p className="text-slate-500 font-medium text-lg">Review all words that have your custom notes and sentences.</p>
           </button>
         </div>
       </motion.div>
@@ -225,21 +216,28 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
                     {currentCard.word}
                   </h2>
 
-                  {notes.length > 0 && (
-                    <div className="absolute bottom-16 left-8 right-8">
-                      <div className="flex items-center gap-2 text-slate-400 mb-2">
-                        <MessageSquare size={14} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">My Notes</span>
-                      </div>
-                          <div className="max-h-20 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                            {notes.map((note, i) => (
-                              <div key={i} className="bg-white/40 p-2 rounded-lg text-xs font-medium text-slate-600 border border-slate-200/30">
-                                {note.text}
-                              </div>
-                            ))}
-                          </div>
-                    </div>
-                  )}
+                  <AnimatePresence>
+                    {showNotes && notes.length > 0 && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute bottom-16 left-8 right-8"
+                      >
+                        <div className="flex items-center gap-2 text-slate-400 mb-2">
+                          <MessageSquare size={14} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">My Notes</span>
+                        </div>
+                        <div className="max-h-20 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                          {notes.map((note, i) => (
+                            <div key={i} className="bg-white/40 p-2 rounded-lg text-xs font-medium text-slate-600 border border-slate-200/30">
+                              {note.text}
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <p className="absolute bottom-8 text-slate-400 text-xs font-black uppercase tracking-widest">Click to flip</p>
                 </div>
@@ -259,19 +257,29 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
         </div>
 
         <div className="flex flex-col gap-4 w-full">
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             <button
               onClick={() => setShowRatingSelector(!showRatingSelector)}
-              className="flex-1 flex items-center justify-center gap-3 py-5 bg-white border-2 border-slate-100 rounded-[2rem] text-slate-600 font-black text-lg shadow-sm hover:border-indigo-200 transition-all"
+              className="flex-1 flex items-center justify-center gap-2 py-4 bg-white border-2 border-slate-100 rounded-2xl text-slate-600 font-black text-sm shadow-sm hover:border-indigo-200 transition-all"
             >
-              <Edit3 size={20} />
-              Change Rating
+              <Edit3 size={18} />
+              Rating
+            </button>
+            <button
+              onClick={() => setShowNotes(!showNotes)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-4 border-2 rounded-2xl font-black text-sm transition-all",
+                showNotes ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-100 text-slate-600 shadow-sm hover:border-indigo-200"
+              )}
+            >
+              <MessageSquare size={18} />
+              Practice
             </button>
             <button
               onClick={handleNext}
-              className="flex-1 flex items-center justify-center gap-3 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all"
+              className="flex-1 flex items-center justify-center gap-2 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all"
             >
-              Next Card
+              Next
             </button>
           </div>
 
