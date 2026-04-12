@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Send, Bot, User, Zap, Loader2, Trophy, Clock, Target, Star } from 'lucide-react';
+import { ChevronLeft, Send, Bot, User, Zap, Loader2, Trophy, Clock, Target, Star, AlertCircle, CheckCircle2, HelpCircle } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { GoogleGenAI, Type } from "@google/genai";
 import { cn } from '../lib/utils';
 
 interface Message {
@@ -39,8 +38,6 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
   const totalTime = stats?.totalConversationTime || 0;
   const avgScore = stats?.conversationTotalAnswers ? (stats.conversationTotalScore / stats.conversationTotalAnswers) : 0;
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-
   const playSound = (type: keyof typeof SOUNDS) => {
     const audio = new Audio(SOUNDS[type]);
     audio.play().catch(() => {});
@@ -65,20 +62,58 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
 
   const highlightMatches = (studentAnswer: string, correctAnswer: string) => {
     if (!correctAnswer) return <span>{studentAnswer}</span>;
-    const studentWords = studentAnswer.toLowerCase().split(/\s+/);
-    const correctWords = correctAnswer.toLowerCase().split(/\s+/);
     
-    return studentAnswer.split(/\s+/).map((word, i) => {
-      const isMatch = correctWords.includes(word.toLowerCase().replace(/[.,!?;:]/g, ''));
-      return (
-        <span 
-          key={i} 
-          className={isMatch ? 'text-emerald-700 font-bold bg-emerald-100 px-1 rounded' : ''}
-        >
-          {word}{' '}
-        </span>
-      );
-    });
+    const normalize = (s: string) => s.toLowerCase().replace(/[.,!?;:]/g, '').trim();
+    const studentWords = studentAnswer.split(/\s+/);
+    const correctWords = correctAnswer.split(/\s+/);
+    const normalizedCorrect = correctWords.map(normalize);
+    
+    return (
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sua Resposta</p>
+          <div className="flex flex-wrap gap-1">
+            {studentWords.map((word, i) => {
+              const norm = normalize(word);
+              const isMatch = normalizedCorrect.includes(norm);
+              return (
+                <span 
+                  key={i} 
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-sm font-bold",
+                    isMatch ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+                  )}
+                >
+                  {word}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correção</p>
+          <div className="flex flex-wrap gap-1">
+            {correctWords.map((word, i) => {
+              const norm = normalize(word);
+              const studentNorms = studentWords.map(normalize);
+              const isMissing = !studentNorms.includes(norm);
+              return (
+                <span 
+                  key={i} 
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-sm font-bold",
+                    isMissing ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                  )}
+                >
+                  {word}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const getNextQuestion = useCallback(() => {
@@ -161,54 +196,30 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
     setInput('');
     setIsTyping(true);
 
-    try {
-      const prompt = `
-        Você é um professor de inglês. Um aluno está praticando uma pergunta específica.
-        Pergunta: "${currentQuestion?.q}"
-        Resposta Esperada: "${currentQuestion?.a || 'N/A'}"
-        Resposta do Aluno: "${studentInput}"
-        
-        Forneça um feedback curto em PORTUGUÊS.
-        REGRAS:
-        1. Responda em PORTUGUÊS.
-        2. Seja muito breve.
-        3. Dê uma nota de 0.0 a 10.0 baseada na precisão (use decimais como 7.5, 8.2, 9.8 para ser preciso).
-        4. NÃO faça perguntas de acompanhamento.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              feedback: { type: Type.STRING },
-              score: { type: Type.NUMBER }
-            },
-            required: ["feedback", "score"]
-          }
-        }
+    // Simulate "thinking" for a better UX even if local
+    setTimeout(async () => {
+      const normalize = (s: string) => s.toLowerCase().replace(/[.,!?;:]/g, '').trim();
+      const expected = normalize(currentQuestion?.a || '');
+      const actual = normalize(studentInput);
+      
+      const expectedWords = (currentQuestion?.a || '').split(/\s+/).map(normalize);
+      const actualWords = studentInput.split(/\s+/).map(normalize);
+      
+      let matches = 0;
+      actualWords.forEach(word => {
+        if (expectedWords.includes(word)) matches++;
       });
 
-      let feedbackText = "Muito bem!";
-      let score = 10;
-
-      try {
-        const parsed = JSON.parse(response.text || '{}');
-        feedbackText = parsed.feedback || "Feedback processado.";
-        score = typeof parsed.score === 'number' ? parsed.score : 0;
-      } catch (e) {
-        console.error("JSON Parse Error:", e, response.text);
-        feedbackText = "Resposta processada.";
-        score = studentInput.toLowerCase().includes(currentQuestion?.a?.toLowerCase() || '') ? 10 : 5;
-      }
+      const score = Math.min(10, (matches / Math.max(expectedWords.length, actualWords.length)) * 10);
+      
+      let feedbackText = "";
+      if (score === 10) feedbackText = "Resposta Correta!";
+      else if (score >= 5) feedbackText = "Resposta Parcial.";
+      else feedbackText = "Resposta Incorreta.";
 
       if (score >= 7) {
         playSound('correct');
         await updateConversationStats(10, 0, score);
-        // Check if leveled up (heuristic since stats update is async)
         if (currentXP + 10 >= 100) playSound('levelUp');
       } else {
         playSound('incorrect');
@@ -228,10 +239,11 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setIsTyping(false);
       
       // Clear messages after 4 seconds and ask a new question
       setTimeout(() => {
-        setMessages([]); // Clear messages
+        setMessages([]);
         setTimeout(() => {
           setIsTyping(true);
           setTimeout(() => {
@@ -246,21 +258,10 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
                 timestamp: Date.now()
               }]);
             }
-          }, 1500);
-        }, 500); // Small gap after clearing
+          }, 1000);
+        }, 500);
       }, 4000);
-
-    } catch (error) {
-      console.error("Gemini Error:", error);
-      setMessages(prev => [...prev, {
-        id: 'error',
-        role: 'assistant',
-        content: "Desculpe, estou com problemas de conexão agora. Podemos tentar novamente?",
-        timestamp: Date.now()
-      }]);
-    } finally {
-      setIsTyping(false);
-    }
+    }, 800);
   };
 
   const formatTime = (seconds: number) => {
@@ -386,19 +387,8 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
                 )}
 
                 {msg.feedback && (
-                  <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sua Resposta</p>
-                      <div className="text-slate-700 leading-relaxed">
-                        {highlightMatches(msg.feedback.studentAnswer, msg.feedback.correctAnswer)}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Resposta Esperada</p>
-                      <p className="text-emerald-700 font-bold">
-                        {msg.feedback.correctAnswer}
-                      </p>
-                    </div>
+                  <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    {highlightMatches(msg.feedback.studentAnswer, msg.feedback.correctAnswer)}
                   </div>
                 )}
               </div>
