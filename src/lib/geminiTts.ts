@@ -58,21 +58,48 @@ export const getGeminiSpeech = async (text: string, voice: 'Charon' | 'Kore' | '
   return null;
 };
 
-export const playBase64Audio = async (base64Data: string) => {
+let audioContext: AudioContext | null = null;
+
+/**
+ * Unlocks or initializes the AudioContext during a user gesture.
+ * This is CRITICAL for mobile browsers which block async audio.
+ */
+export const initAudioContext = async () => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) {
-      console.error("Web Audio API not supported in this browser");
-      return;
+    if (!AudioContextClass) return null;
+
+    if (!audioContext) {
+      audioContext = new AudioContextClass();
+    }
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
     }
     
-    const audioContext = new AudioContextClass();
-    console.log("AudioContext state:", audioContext.state);
-    
-    if (audioContext.state === 'suspended') {
-      console.log("Attempting to resume AudioContext...");
-      await audioContext.resume();
-      console.log("AudioContext state after resume:", audioContext.state);
+    // Play a tiny bit of silence to fully prime the device's audio hardware
+    const osc = audioContext.createOscillator();
+    const silentGain = audioContext.createGain();
+    silentGain.gain.value = 0;
+    osc.connect(silentGain);
+    silentGain.connect(audioContext.destination);
+    osc.start(0);
+    osc.stop(0.001);
+
+    return audioContext;
+  } catch (e) {
+    console.error("Failed to init AudioContext:", e);
+    return null;
+  }
+};
+
+export const playBase64Audio = async (base64Data: string) => {
+  try {
+    // Ensure context is ready
+    const ctx = await initAudioContext();
+    if (!ctx) {
+      console.error("Web Audio API not supported or could not be initialized");
+      return;
     }
 
     const binaryString = atob(base64Data);
@@ -86,15 +113,15 @@ export const playBase64Audio = async (base64Data: string) => {
     const int16Array = new Int16Array(buffer);
     const float32Array = new Float32Array(int16Array.length);
     for (let i = 0; i < int16Array.length; i++) {
-      float32Array[i] = int16Array[i] / 32768; // 16-bit range is -32768 to 32767
+      float32Array[i] = int16Array[i] / 32768; 
     }
 
-    const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000);
+    const audioBuffer = ctx.createBuffer(1, float32Array.length, 24000);
     audioBuffer.getChannelData(0).set(float32Array);
 
-    const source = audioContext.createBufferSource();
+    const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
+    source.connect(ctx.destination);
     source.start();
   } catch (err) {
     console.error("Audio playback failed:", err);
