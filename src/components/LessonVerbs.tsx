@@ -18,7 +18,7 @@ export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsP
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
-  const { currentUser, updateVocabStats, toggleFavoriteCard, favoriteCards, incrementViewCount, userStats } = useAppStore();
+  const { currentUser, updateVocabStats, toggleFavoriteCard, favoriteCards, incrementViewCount, userStats, voicePreference } = useAppStore();
 
   const verbs = lesson.verbs || [];
 
@@ -36,7 +36,7 @@ export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsP
 
   useEffect(() => {
     if (pool.length > 0 && !isFlipped && pool[currentIndex]) {
-      speak(pool[currentIndex].word);
+      speak(pool[currentIndex].word, voicePreference);
     }
   }, [currentIndex, pool, isFlipped]);
 
@@ -44,7 +44,7 @@ export default function LessonVerbs({ lesson, onComplete, onBack }: LessonVerbsP
     const nextFlipped = !isFlipped;
     setIsFlipped(nextFlipped);
     if (!nextFlipped && pool[currentIndex]) {
-      speak(pool[currentIndex].word);
+      speak(pool[currentIndex].word, voicePreference);
     }
   };
 

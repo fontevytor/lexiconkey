@@ -29,7 +29,7 @@ const DIFFICULTY_TEXT = {
 };
 
 export default function GeneralCards({ onBack }: GeneralCardsProps) {
-  const { currentUser, favoriteCards, customLessons, toggleFavoriteCard, userStats, userNotes, updateVocabStats } = useAppStore();
+  const { currentUser, favoriteCards, customLessons, toggleFavoriteCard, userStats, userNotes, updateVocabStats, voicePreference } = useAppStore();
   const [view, setView] = useState<'selection' | 'cards'>('selection');
   const [filterType, setFilterType] = useState<'all' | 'verbs' | 'practice'>('all');
   const [pool, setPool] = useState<Vocabulary[]>([]);
@@ -70,7 +70,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
     const nextFlipped = !isFlipped;
     setIsFlipped(nextFlipped);
     if (!nextFlipped && currentCard) {
-      speak(currentCard.word);
+      speak(currentCard.word, voicePreference);
     }
   };
 
@@ -164,7 +164,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
 
   useEffect(() => {
     if (view === 'cards' && currentCard && !isFlipped) {
-      speak(currentCard.word);
+      speak(currentCard.word, voicePreference);
     }
   }, [view, currentCard, isFlipped]);
 
@@ -219,7 +219,7 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
                   </div>
 
                   <button 
-                    onClick={(e) => { e.stopPropagation(); speak(currentCard.word); }}
+                    onClick={(e) => { e.stopPropagation(); speak(currentCard.word, voicePreference); }}
                     className="absolute top-8 right-24 p-3 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-100 transition-all"
                     title="Speak"
                   >

@@ -23,7 +23,9 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
     incrementViewCount,
     updateStudentActivity,
     favoriteCards,
-    customLessons
+    customLessons,
+    voicePreference,
+    setVoicePreference
   } = useAppStore();
 
   const [view, setView] = useState<'selection' | 'list'>('selection');
@@ -91,7 +93,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
   const handleWordSelect = (item: any) => {
     setSelectedWord(item);
     incrementViewCount(item.word);
-    speak(item.word);
+    speak(item.word, voicePreference);
     if (currentUser && currentUser !== 'teacher') {
       const wordIndex = item.lessonId ? customLessons.find(l => l.id === item.lessonId)?.vocabulary.findIndex(v => v.word === item.word) : 0;
       updateStudentActivity(currentUser, { 
@@ -194,6 +196,18 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
               <option value="practice">Custom Practice Count</option>
             </select>
           </div>
+          <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl px-4 py-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Voice:</span>
+            <select 
+              value={voicePreference} 
+              onChange={(e) => setVoicePreference(e.target.value as any)}
+              className="bg-transparent text-sm font-black text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="random">Random GB</option>
+              <option value="male">Male GB</option>
+              <option value="female">Female GB</option>
+            </select>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
             <input 
@@ -293,7 +307,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
                       Lesson {selectedWord.lessonId}
                     </span>
                     <button 
-                      onClick={() => speak(selectedWord.word)}
+                      onClick={() => speak(selectedWord.word, voicePreference)}
                       className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
                       title="Speak"
                     >

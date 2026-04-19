@@ -18,7 +18,7 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
-  const { currentUser, completeActivity, updateVocabStats, updateStudentActivity, toggleFavoriteCard, favoriteCards, incrementViewCount, userStats } = useAppStore();
+  const { currentUser, completeActivity, updateVocabStats, updateStudentActivity, toggleFavoriteCard, favoriteCards, incrementViewCount, userStats, voicePreference } = useAppStore();
 
   useEffect(() => {
     setPool([...lesson.vocabulary].sort(() => Math.random() - 0.5));
@@ -36,7 +36,7 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
 
   useEffect(() => {
     if (pool.length > 0 && !isFlipped) {
-      speak(pool[currentIndex].word);
+      speak(pool[currentIndex].word, voicePreference);
     }
   }, [currentIndex, pool, isFlipped]);
 
@@ -44,7 +44,7 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
     const nextFlipped = !isFlipped;
     setIsFlipped(nextFlipped);
     if (!nextFlipped && pool[currentIndex]) {
-      speak(pool[currentIndex].word);
+      speak(pool[currentIndex].word, voicePreference);
     }
   };
 

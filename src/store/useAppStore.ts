@@ -182,6 +182,8 @@ interface AppState {
   loginAsStudent: (username: string) => Promise<void>;
   exportProgressKey: () => string;
   importProgressKey: (key: string) => boolean;
+  voicePreference: 'male' | 'female' | 'random';
+  setVoicePreference: (pref: 'male' | 'female' | 'random') => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -205,8 +207,10 @@ export const useAppStore = create<AppState>()(
       customLessons: LESSONS.map(l => ({ ...l, bookId: l.bookId || 1 })),
       lastSaved: Date.now(),
       initialized: false,
+      voicePreference: 'random',
       setUserType: (userType) => set({ userType }),
       setCurrentUser: (currentUser) => set({ currentUser }),
+      setVoicePreference: (voicePreference) => set({ voicePreference }),
       
       initFirestore: () => {
         if (get().initialized) return () => {};
