@@ -29,38 +29,53 @@ export const speak = (text: string) => {
     voices = window.speechSynthesis.getVoices();
   }
 
-  // Force language to British English
+  // Set general language first
   utterance.lang = 'en-GB';
 
-  // Try to find a British English male voice
-  // Common British Male voices: "Daniel", "Oliver", "Harry", "Thomas", "Google UK English Male", "David", "James"
-  const britishMaleVoice = voices.find(v => 
-    (v.lang.startsWith('en-GB') || v.lang.startsWith('en_GB')) && 
-    (
-      v.name.toLowerCase().includes('male') || 
-      v.name.toLowerCase().includes('david') || 
-      v.name.toLowerCase().includes('james') ||
-      v.name.toLowerCase().includes('daniel') ||
-      v.name.toLowerCase().includes('oliver') ||
-      v.name.toLowerCase().includes('harry') ||
-      v.name.toLowerCase().includes('thomas') ||
-      v.name.toLowerCase().includes('guy') ||
-      v.name.toLowerCase().includes('brian')
-    )
-  ) || voices.find(v => v.lang.startsWith('en-GB') || v.lang.startsWith('en_GB'));
+  // Specific search for British Male voices across different platforms:
+  // iOS/macOS: "Arthur", "Daniel", "Oliver"
+  // Android/Chrome: "Google UK English Male", "en-gb-x-fis-local"
+  // Windows: "George", "Hazel" (female but UK)
+  const britishMaleVoice = voices.find(v => {
+    const name = v.name.toLowerCase();
+    const lang = v.lang.toLowerCase().replace('_', '-');
+    const isUK = lang.startsWith('en-gb');
+    
+    // Prioritize known male names or male identifiers
+    const isMale = name.includes('male') || 
+                   name.includes('arthur') || 
+                   name.includes('daniel') || 
+                   name.includes('david') || 
+                   name.includes('james') ||
+                   name.includes('oliver') ||
+                   name.includes('harry') ||
+                   name.includes('thomas') ||
+                   name.includes('guy') ||
+                   name.includes('brian') ||
+                   name.includes('uk-male');
+    
+    return isUK && isMale;
+  }) || voices.find(v => v.lang.toLowerCase().replace('_', '-').startsWith('en-gb'));
 
   if (britishMaleVoice) {
     utterance.voice = britishMaleVoice;
+    // Adjust pitch down for male voices if they sound too high
+    utterance.pitch = 0.85;
   } else {
-    // If no British voice, try any male voice as a fallback
+    // If no British voice, try ANY male voice as a fallback
     const maleVoice = voices.find(v => v.name.toLowerCase().includes('male'));
-    if (maleVoice) utterance.voice = maleVoice;
+    if (maleVoice) {
+      utterance.voice = maleVoice;
+      utterance.pitch = 0.8;
+    } else {
+      // Last resort: robotic voice but lowered pitch
+      utterance.pitch = 0.7; 
+    }
   }
 
-  utterance.rate = 0.85; // Slightly slower for better pronunciation
-  utterance.pitch = 0.9; // Slightly lower pitch to sound more masculine if a female voice is used as fallback
-
+  utterance.rate = 0.8; // Slower for clear pronunciation
   window.speechSynthesis.speak(utterance);
 };
+
 
 

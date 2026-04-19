@@ -105,14 +105,13 @@ export default function App() {
     }
   }, [initialized, currentUser, syncUserData]);
 
-  // If user was already logged in (from persist), make sure they are in the right view
+  // If user was already logged in (from persist), we stay on landing page
+  // but keep the user state so they don't have to re-login.
+  // The user explicitly wants to see the menu first.
   useEffect(() => {
     if (initialized && currentUser) {
-      if (currentUser === 'teacher') {
-        setView('teacher');
-      } else {
-        setView('home');
-      }
+      // We don't force setView here anymore to respect the user's wish 
+      // of seeing the landing menu first.
     }
   }, [initialized, currentUser]);
 
