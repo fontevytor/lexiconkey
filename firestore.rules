@@ -46,6 +46,15 @@ service cloud.firestore {
       }
     }
 
+    match /books {
+      allow read: if true;
+      allow write: if isAdmin();
+      match /{bookId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
     match /userProgress {
       allow list: if isAdmin();
       match /{username}/{document=**} {

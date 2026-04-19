@@ -5,6 +5,7 @@ import { LessonData, Vocabulary } from '../data/lessons';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
 import confetti from 'canvas-confetti';
+import { speak } from '../lib/tts';
 
 interface FlashcardsProps {
   lesson: LessonData;
@@ -33,7 +34,19 @@ export default function Flashcards({ lesson, onComplete, onBack }: FlashcardsPro
     }
   }, [currentIndex, pool, currentUser, lesson.id, incrementViewCount]);
 
-  const handleFlip = () => setIsFlipped(!isFlipped);
+  useEffect(() => {
+    if (pool.length > 0 && !isFlipped) {
+      speak(pool[currentIndex].word);
+    }
+  }, [currentIndex, pool, isFlipped]);
+
+  const handleFlip = () => {
+    const nextFlipped = !isFlipped;
+    setIsFlipped(nextFlipped);
+    if (!nextFlipped && pool[currentIndex]) {
+      speak(pool[currentIndex].word);
+    }
+  };
 
   const handleDifficulty = (level: number) => {
     updateVocabStats(pool[currentIndex].word, { difficulty: level });

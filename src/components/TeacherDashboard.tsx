@@ -11,16 +11,45 @@ interface TeacherDashboardProps {
 
 export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
   const { 
+    books,
+    updateBook,
     customLessons, 
     updateLesson, 
     addLesson,
-    reorderLessons
+    deleteLesson,
+    reorderLessons,
+    clearAllLessons
   } = useAppStore();
   
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
   const [showSaved, setShowSaved] = useState(false);
+  const [editingBookId, setEditingBookId] = useState<number | null>(null);
   
-  const selectedLesson = customLessons.find(l => l.id === selectedLessonId);
+  const selectedBook = books.find(b => b.id === selectedBookId);
+  const bookLessons = customLessons.filter(l => l.bookId === selectedBookId);
+  const selectedLesson = bookLessons.find(l => l.id === selectedLessonId);
+
+  const handleWipeLessons = async () => {
+    if (window.confirm('CUIDADO: Isso apagará TODAS as lições de TODOS os livros permanentemente. Você tem certeza?')) {
+      try {
+        await clearAllLessons();
+        setSelectedLessonId(null);
+        setShowSaved(true);
+        setTimeout(() => setShowSaved(false), 2000);
+      } catch (err) {
+        console.error("Erro ao apagar lições:", err);
+      }
+    }
+  };
+
+  const handleUpdateBookTitle = (id: number, title: string) => {
+    updateBook(id, { title });
+  };
+
+  const handleUpdateBookDescription = (id: number, description: string) => {
+    updateBook(id, { description });
+  };
 
   const handleUpdateLessonTitle = (title: string) => {
     if (!selectedLesson) return;
@@ -99,23 +128,49 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
   };
 
   const handleAddLesson = () => {
-    const newId = Math.max(...customLessons.map(l => l.id), 0) + 1;
+    if (!selectedBookId) return;
+    const bookLessons = customLessons.filter(l => l.bookId === selectedBookId);
+    // Use a composite ID: bookId * 1000 + (next local index + 1)
+    // This keeps it unique and starts "visually" from 1 (if we modulo 1000)
+    const nextLocalId = bookLessons.length + 1;
+    const newId = (selectedBookId * 1000) + nextLocalId;
+    
+    // Ensure uniqueness just in case
+    let finalId = newId;
+    while (customLessons.some(l => l.id === finalId)) {
+      finalId++;
+    }
+
     const newLesson: LessonData = {
-      id: newId,
-      title: `New Lesson ${newId}`,
-      vocabulary: [{ word: 'HELLO', translation: 'Olá' }],
-      phrases: ['HELLO WORLD'],
-      assignments: [{ question: 'How do you say hello?', answer: 'Hello' }]
+      id: finalId,
+      bookId: selectedBookId,
+      title: `Lesson ${nextLocalId}`,
+      vocabulary: [{ word: 'NEW', translation: 'Novo' }],
+      phrases: ['NEW PHRASE'],
+      assignments: [{ question: 'Translate: NEW', answer: 'Novo' }]
     };
     addLesson(newLesson);
-    setSelectedLessonId(newId);
+    setSelectedLessonId(finalId);
+  };
+
+  const handleDeleteLesson = async (id: number) => {
+    try {
+      await deleteLesson(id);
+      if (selectedLessonId === id) setSelectedLessonId(null);
+    } catch (err) {
+      console.error("Failed to delete lesson:", err);
+    }
   };
 
   const handleMoveLesson = (index: number, direction: 'up' | 'down') => {
     const newLessons = [...customLessons];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newLessons.length) return;
+    const bookLessonsIndices = customLessons.map((l, i) => l.bookId === selectedBookId ? i : -1).filter(i => i !== -1);
+    const bookIndex = bookLessonsIndices.indexOf(index);
+    const targetBookIndex = direction === 'up' ? bookIndex - 1 : bookIndex + 1;
     
+    if (targetBookIndex < 0 || targetBookIndex >= bookLessonsIndices.length) return;
+    
+    const targetIndex = bookLessonsIndices[targetBookIndex];
     [newLessons[index], newLessons[targetIndex]] = [newLessons[targetIndex], newLessons[index]];
     reorderLessons(newLessons);
   };
@@ -131,11 +186,11 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-12">
           <div>
             <button 
-              onClick={onBack}
+              onClick={selectedBookId ? () => { setSelectedBookId(null); setSelectedLessonId(null); } : onBack}
               className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors font-bold mb-4 group"
             >
               <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              Exit Teacher Mode
+              {selectedBookId ? 'Back to Books' : 'Exit Teacher Mode'}
             </button>
             <h1 className="text-5xl font-black tracking-tighter text-slate-900">
               Teacher <span className="text-indigo-600">Dashboard</span>
@@ -152,65 +207,157 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Lesson List */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">Lessons</h2>
+        {!selectedBookId ? (
+          <div className="space-y-8">
+            <div className="bg-rose-50 border-2 border-rose-100 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div>
+                <h3 className="text-xl font-black text-rose-900 mb-1 uppercase tracking-widest leading-none">Zona de Perigo</h3>
+                <p className="text-rose-600 font-bold text-xs uppercase tracking-widest opacity-60">Apague todas as lições do banco de dados para começar do zero.</p>
+              </div>
               <button 
-                onClick={handleAddLesson}
-                className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
-                title="Add New Lesson"
+                onClick={handleWipeLessons}
+                className="w-full md:w-auto px-8 py-4 bg-rose-600 text-white rounded-2xl font-black hover:bg-rose-700 transition-all shadow-lg shadow-rose-500/20 active:scale-95 flex items-center justify-center gap-2"
               >
-                <Plus size={20} />
+                <Trash2 size={20} /> Apagar Todas as Lições
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-3">
-              {customLessons.map((lesson, index) => (
-                <div key={lesson.id} className="group relative">
-                  <button
-                    onClick={() => setSelectedLessonId(lesson.id)}
-                    className={cn(
-                      "w-full p-6 rounded-3xl border-2 text-left transition-all font-black pr-16",
-                      selectedLessonId === lesson.id
-                        ? "bg-white border-indigo-600 shadow-xl shadow-indigo-500/10 text-indigo-600"
-                        : "bg-white border-slate-100 text-slate-600 hover:border-slate-300"
-                    )}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="truncate">{lesson.title}</span>
-                      <span className="text-[10px] opacity-40 font-mono">ID:{lesson.id}</span>
-                    </div>
-                  </button>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleMoveLesson(index, 'up'); }}
-                      disabled={index === 0}
-                      className="p-1 hover:bg-slate-100 rounded-md disabled:opacity-20"
-                    >
-                      <ChevronUp size={16} />
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleMoveLesson(index, 'down'); }}
-                      disabled={index === customLessons.length - 1}
-                      className="p-1 hover:bg-slate-100 rounded-md disabled:opacity-20"
-                    >
-                      <ChevronDown size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Editor */}
-          <div className="lg:col-span-2">
-            {selectedLesson ? (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-8"
-              >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {books.map(book => (
+              <div key={book.id} className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm hover:border-indigo-500 transition-all group relative">
+                <div className="mb-6">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 text-indigo-600">
+                    <BookIcon size={24} />
+                  </div>
+                  {editingBookId === book.id ? (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center bg-slate-50 border-2 border-indigo-200 rounded-xl p-4">
+                        <div className="flex-1 space-y-4">
+                          <input 
+                            type="text"
+                            value={book.title}
+                            onChange={(e) => handleUpdateBookTitle(book.id, e.target.value)}
+                            className="w-full bg-transparent font-black outline-none border-b border-indigo-100 focus:border-indigo-500 pb-1"
+                            placeholder="Book Title"
+                            autoFocus
+                          />
+                          <textarea 
+                            value={book.description}
+                            onChange={(e) => handleUpdateBookDescription(book.id, e.target.value)}
+                            className="w-full bg-transparent font-medium outline-none text-sm resize-none h-20"
+                            placeholder="Book Description"
+                          />
+                        </div>
+                        <button 
+                          onClick={() => setEditingBookId(null)}
+                          className="ml-4 p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg"
+                          title="Save Changes"
+                        >
+                          <CheckCircle2 size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="text-2xl font-black text-slate-900 mb-2">{book.title}</h3>
+                      <p className="text-slate-500 font-medium mb-4 text-sm">{book.description}</p>
+                    </>
+                  )}
+                </div>
+                <div className="flex justify-between items-center">
+                  <button 
+                    onClick={() => setSelectedBookId(book.id)}
+                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black hover:bg-indigo-700 transition-all text-sm"
+                  >
+                    Manage Lessons
+                  </button>
+                  <button 
+                    onClick={() => setEditingBookId(editingBookId === book.id ? null : book.id)}
+                    className="p-3 text-slate-400 hover:text-indigo-600 transition-all"
+                  >
+                    <Edit2 size={20} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Lesson List */}
+            <div className="lg:col-span-1 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest leading-none">Lessons</h2>
+                  <p className="text-xs font-bold text-slate-400 mt-1">{selectedBook?.title}</p>
+                </div>
+                <button 
+                  onClick={handleAddLesson}
+                  className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
+                  title="Add New Lesson"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {bookLessons.map((lesson, index) => {
+                  const absoluteIndex = customLessons.findIndex(l => l.id === lesson.id);
+                  return (
+                    <div key={lesson.id} className="group relative">
+                      <button
+                        onClick={() => setSelectedLessonId(lesson.id)}
+                        className={cn(
+                          "w-full p-6 rounded-3xl border-2 text-left transition-all font-black pr-16",
+                          selectedLessonId === lesson.id
+                            ? "bg-white border-indigo-600 shadow-xl shadow-indigo-500/10 text-indigo-600"
+                            : "bg-white border-slate-100 text-slate-600 hover:border-slate-300"
+                        )}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs opacity-40 font-mono">#{index + 1}</span>
+                            <span className="truncate">{lesson.title}</span>
+                          </div>
+                          <span className="text-[10px] opacity-20 font-mono">ID:{lesson.id}</span>
+                        </div>
+                      </button>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleMoveLesson(absoluteIndex, 'up'); }}
+                          className="p-1 hover:bg-slate-100 rounded-md disabled:opacity-20 bg-white border border-slate-100 shadow-sm"
+                          title="Move Up"
+                        >
+                          <ChevronUp size={16} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleMoveLesson(absoluteIndex, 'down'); }}
+                          className="p-1 hover:bg-slate-100 rounded-md disabled:opacity-20 bg-white border border-slate-100 shadow-sm"
+                          title="Move Down"
+                        >
+                          <ChevronDown size={16} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteLesson(lesson.id); }}
+                          className="p-1 hover:bg-rose-50 text-rose-400 rounded-md bg-white border border-rose-100 shadow-sm"
+                          title="Delete Lesson"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Editor */}
+            <div className="lg:col-span-2">
+              {selectedLesson ? (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-8"
+                >
                 {/* Lesson Details */}
                 <div className="bg-white rounded-[3rem] border-2 border-slate-100 p-8 shadow-sm">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
@@ -235,12 +382,21 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
                         />
                       </div>
                     </div>
-                    <button 
-                      onClick={handleAddWord}
-                      className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black hover:bg-emerald-100 transition-all"
-                    >
-                      <Plus size={20} /> Add Word
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => handleDeleteLesson(selectedLesson.id)}
+                        className="flex items-center gap-2 px-6 py-3 bg-rose-50 text-rose-600 rounded-2xl font-black hover:bg-rose-100 transition-all"
+                        title="Delete this lesson permanently"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                      <button 
+                        onClick={handleAddWord}
+                        className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black hover:bg-emerald-100 transition-all"
+                      >
+                        <Plus size={20} /> Add Word
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-6">
@@ -444,7 +600,8 @@ export default function TeacherDashboard({ onBack }: TeacherDashboardProps) {
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
+  </div>
   );
 }

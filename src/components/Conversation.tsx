@@ -27,6 +27,7 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [waitingForNext, setWaitingForNext] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<{q: string, a?: string, type: 'assignment' | 'translation'} | null>(null);
   const [sessionTime, setSessionTime] = useState(0);
   const [lastTimeUpdate, setLastTimeUpdate] = useState(Date.now());
@@ -240,28 +241,29 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
 
       setMessages(prev => [...prev, assistantMessage]);
       setIsTyping(false);
-      
-      // Clear messages after 4 seconds and ask a new question
-      setTimeout(() => {
-        setMessages([]);
-        setTimeout(() => {
-          setIsTyping(true);
-          setTimeout(() => {
-            setIsTyping(false);
-            const nextQuestion = getNextQuestion();
-            if (nextQuestion) {
-              setCurrentQuestion(nextQuestion);
-              setMessages([{
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: `Próxima pergunta: ${nextQuestion.q}`,
-                timestamp: Date.now()
-              }]);
-            }
-          }, 1000);
-        }, 500);
-      }, 4000);
+      setWaitingForNext(true);
     }, 800);
+  };
+
+  const handleNextMessage = () => {
+    setWaitingForNext(false);
+    setMessages([]);
+    setTimeout(() => {
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+        const nextQuestion = getNextQuestion();
+        if (nextQuestion) {
+          setCurrentQuestion(nextQuestion);
+          setMessages([{
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `Próxima pergunta: ${nextQuestion.q}`,
+            timestamp: Date.now()
+          }]);
+        }
+      }, 1000);
+    }, 500);
   };
 
   const formatTime = (seconds: number) => {
@@ -414,21 +416,32 @@ export default function Conversation({ onBack }: { onBack: () => void }) {
       {/* Input Area */}
       <div className="p-6 bg-white border-t border-slate-100">
         <div className="max-w-4xl mx-auto flex gap-3">
-          <input 
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Digite sua resposta..."
-            className="flex-1 px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-medium"
-          />
-          <button 
-            onClick={handleSend}
-            disabled={!input.trim() || isTyping}
-            className="p-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:scale-100 active:scale-95"
-          >
-            <Send size={24} />
-          </button>
+          {waitingForNext ? (
+            <button 
+              onClick={handleNextMessage}
+              className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+            >
+              Next Message <CheckCircle2 size={24} />
+            </button>
+          ) : (
+            <>
+              <input 
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Digite sua resposta..."
+                className="flex-1 px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-medium"
+              />
+              <button 
+                onClick={handleSend}
+                disabled={!input.trim() || isTyping}
+                className="p-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:scale-100 active:scale-95"
+              >
+                <Send size={24} />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "number" },
+        "bookId": { "type": "number" },
         "title": { "type": "string" },
         "vocabulary": {
           "type": "array",
@@ -33,6 +34,17 @@
         }
       },
       "required": ["id", "title", "vocabulary"]
+    },
+    "Book": {
+      "title": "Book",
+      "description": "Book containing multiple lessons",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "title", "description"]
     },
     "LessonProgress": {
       "title": "Lesson Progress",
@@ -93,6 +105,10 @@
     "lessons/{lessonId}": {
       "schema": "Lesson",
       "description": "Collection of custom lessons"
+    },
+    "books/{bookId}": {
+      "schema": "Book",
+      "description": "Collection of books"
     },
     "userProgress/{username}/lessons/{lessonId}": {
       "schema": "LessonProgress",

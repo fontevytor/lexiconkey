@@ -76,7 +76,8 @@ export default function App() {
 
   const [view, setView] = useState<View>('landing');
   const [deviceType, setDeviceType] = useState<DeviceType>('desktop');
-  const [selectedLesson, setSelectedLesson] = useState<LessonData | null>(null);
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
+  const [selectedLessonId, setSelectedLessonId] = useState<LessonData | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<ActivityType | null>(null);
   const [showSaved, setShowSaved] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -114,6 +115,8 @@ export default function App() {
       }
     }
   }, [initialized, currentUser]);
+
+  const { books } = useAppStore();
 
   if (!initialized) {
     return (
@@ -164,6 +167,8 @@ export default function App() {
     setLoginMode(null);
     setUsername('');
     setPassword('');
+    setSelectedBookId(null);
+    setSelectedLessonId(null);
   };
 
   const handleSave = () => {
@@ -174,7 +179,7 @@ export default function App() {
 
   const handleLessonSelect = (lesson: LessonData) => {
     if (isLessonUnlocked(lesson.id)) {
-      setSelectedLesson(lesson);
+      setSelectedLessonId(lesson);
       setView('lesson-detail');
     }
   };
@@ -197,20 +202,20 @@ export default function App() {
   };
 
   const renderActivity = () => {
-    if (!selectedLesson || !selectedActivity) return null;
+    if (!selectedLessonId || !selectedActivity) return null;
 
     const props = {
-      lesson: selectedLesson,
+      lesson: selectedLessonId,
       onComplete: () => setView('lesson-detail'),
       onBack: () => setView('lesson-detail'),
     };
 
     switch (selectedActivity) {
-      case 'flashcards': return <Flashcards {...props} onComplete={() => { completeActivity(selectedLesson.id, 'flashcards'); setView('lesson-detail'); }} />;
-      case 'phraseUnscramble': return <PhraseUnscramble {...props} onComplete={() => { completeActivity(selectedLesson.id, 'phraseUnscramble'); setView('lesson-detail'); }} />;
-      case 'hangman': return <Hangman {...props} onComplete={() => { completeActivity(selectedLesson.id, 'hangman'); setView('lesson-detail'); }} />;
-      case 'scramble': return <WordScramble lesson={selectedLesson} onComplete={() => { completeActivity(selectedLesson.id, 'scramble'); setView('lesson-detail'); }} onClose={() => setView('lesson-detail')} />;
-      case 'piano': return <PianoFail {...props} onComplete={() => { completeActivity(selectedLesson.id, 'piano'); setView('lesson-detail'); }} />;
+      case 'flashcards': return <Flashcards {...props} onComplete={() => { completeActivity(selectedLessonId.id, 'flashcards'); setView('lesson-detail'); }} />;
+      case 'phraseUnscramble': return <PhraseUnscramble {...props} onComplete={() => { completeActivity(selectedLessonId.id, 'phraseUnscramble'); setView('lesson-detail'); }} />;
+      case 'hangman': return <Hangman {...props} onComplete={() => { completeActivity(selectedLessonId.id, 'hangman'); setView('lesson-detail'); }} />;
+      case 'scramble': return <WordScramble lesson={selectedLessonId} onComplete={() => { completeActivity(selectedLessonId.id, 'scramble'); setView('lesson-detail'); }} onClose={() => setView('lesson-detail')} />;
+      case 'piano': return <PianoFail {...props} onComplete={() => { completeActivity(selectedLessonId.id, 'piano'); setView('lesson-detail'); }} />;
       default: return null;
     }
   };
@@ -578,79 +583,132 @@ export default function App() {
 
             <WordOfTheDay />
 
-            <div className={cn(
-              "grid gap-6",
-              deviceType === 'mobile' ? "grid-cols-1" : deviceType === 'tablet' ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-            )}>
-              {customLessons.map((lesson, index) => {
-                const unlocked = isLessonUnlocked(lesson.id);
-                const stars = getStarsCount(lesson.id);
-                const assignmentCompleted = currentUser ? userProgress[currentUser]?.[lesson.id]?.assignmentCompleted : false;
-                
-                return (
+            {!selectedBookId ? (
+              <div className={cn(
+                "grid gap-6",
+                deviceType === 'mobile' ? "grid-cols-1" : deviceType === 'tablet' ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              )}>
+                {books.map((book, index) => (
                   <motion.button
-                    key={lesson.id}
+                    key={book.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    whileHover={unlocked ? { y: -4, scale: 1.02 } : {}}
-                    whileTap={unlocked ? { scale: 0.98 } : {}}
-                    onClick={() => handleLessonSelect(lesson)}
-                    className={cn(
-                      "relative p-8 rounded-[2.5rem] border-2 text-left transition-all overflow-hidden shadow-sm",
-                      unlocked 
-                        ? (assignmentCompleted 
-                            ? "bg-green-50 border-green-200 hover:border-green-500 hover:shadow-xl cursor-pointer" 
-                            : (stars >= 4 
-                                ? "bg-yellow-50 border-yellow-200 hover:border-yellow-500 hover:shadow-xl cursor-pointer"
-                                : "bg-white border-slate-200 hover:border-indigo-500 hover:shadow-xl cursor-pointer"
-                              )
-                          )
-                        : "bg-slate-100 border-transparent opacity-60 grayscale cursor-not-allowed"
-                    )}
+                    transition={{ delay: index * 0.1 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setSelectedBookId(book.id)}
+                    className="group relative p-8 rounded-[3rem] bg-white border-2 border-slate-100 text-left transition-all hover:border-indigo-500 hover:shadow-2xl overflow-hidden shadow-sm"
                   >
-                    {!unlocked && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/5 backdrop-blur-[2px] z-10">
-                        <Lock className="text-slate-600" size={32} />
-                      </div>
-                    )}
-                    
-                    <div className="relative z-0">
-                      <div className="flex justify-between items-start mb-6">
-                        <span className="text-4xl font-black text-slate-300 group-hover:text-indigo-100 transition-colors">
-                          {String(lesson.id).padStart(2, '0')}
-                        </span>
-                        {unlocked && (
-                          <div className="flex gap-1">
-                            {[...Array(5)].map((_, i) => (
-                              <Star 
-                                key={i} 
-                                size={14} 
-                                className={cn(
-                                  "transition-colors",
-                                  i < stars ? "fill-amber-400 text-amber-400" : "text-slate-300"
-                                )} 
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <h3 className="text-2xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors leading-tight">
-                        {lesson.title}
-                      </h3>
-                      {lesson.subtitle && (
-                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-2">
-                          {lesson.subtitle}
-                        </p>
-                      )}
-                      <p className="text-slate-600 font-medium text-sm">
-                        {lesson.vocabulary.length} words to master
-                      </p>
+                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <BookOpen size={32} />
+                    </div>
+                    <h3 className="text-3xl font-black text-slate-900 mb-2 leading-tight group-hover:text-indigo-600 transition-colors">
+                      {book.title}
+                    </h3>
+                    <p className="text-slate-500 font-medium text-sm line-clamp-2">
+                      {book.description}
+                    </p>
+                    <div className="mt-8 flex items-center gap-2 text-indigo-600 font-black text-xs uppercase tracking-widest">
+                      <span>View Lessons</span>
+                      <ChevronLeft size={16} className="rotate-180" />
                     </div>
                   </motion.button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-8">
+                <button 
+                  onClick={() => setSelectedBookId(null)}
+                  className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors font-bold group"
+                >
+                  <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+                  Back to Books
+                </button>
+                
+                <div className="flex items-end justify-between">
+                  <h2 className="text-4xl font-black tracking-tight text-slate-900">
+                    {books.find(b => b.id === selectedBookId)?.title}
+                  </h2>
+                  <p className="text-slate-400 font-black text-xs uppercase tracking-widest mb-1">
+                    {customLessons.filter(l => l.bookId === selectedBookId).length} Lessons
+                  </p>
+                </div>
+
+                <div className={cn(
+                  "grid gap-6",
+                  deviceType === 'mobile' ? "grid-cols-1" : deviceType === 'tablet' ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                )}>
+                  {customLessons.filter(l => l.bookId === selectedBookId).map((lesson, index) => {
+                    const unlocked = isLessonUnlocked(lesson.id);
+                    const stars = getStarsCount(lesson.id);
+                    const assignmentCompleted = currentUser ? userProgress[currentUser]?.[lesson.id]?.assignmentCompleted : false;
+                    
+                    return (
+                      <motion.button
+                        key={lesson.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        whileHover={unlocked ? { y: -4, scale: 1.02 } : {}}
+                        whileTap={unlocked ? { scale: 0.98 } : {}}
+                        onClick={() => handleLessonSelect(lesson)}
+                        className={cn(
+                          "relative p-8 rounded-[2.5rem] border-2 text-left transition-all overflow-hidden shadow-sm",
+                          unlocked 
+                            ? (assignmentCompleted 
+                                ? "bg-green-50 border-green-200 hover:border-green-500 hover:shadow-xl cursor-pointer" 
+                                : (stars >= 4 
+                                    ? "bg-yellow-50 border-yellow-200 hover:border-yellow-500 hover:shadow-xl cursor-pointer"
+                                    : "bg-white border-slate-200 hover:border-indigo-500 hover:shadow-xl cursor-pointer"
+                                  )
+                              )
+                            : "bg-slate-100 border-transparent opacity-60 grayscale cursor-not-allowed"
+                        )}
+                      >
+                        {!unlocked && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/5 backdrop-blur-[2px] z-10">
+                            <Lock className="text-slate-600" size={32} />
+                          </div>
+                        )}
+                        
+                        <div className="relative z-0">
+                          <div className="flex justify-between items-start mb-6">
+                            <span className="text-4xl font-black text-slate-300 group-hover:text-indigo-100 transition-colors">
+                              {String(index + 1).padStart(2, '0')}
+                            </span>
+                            {unlocked && (
+                              <div className="flex gap-1">
+                                {[...Array(5)].map((_, i) => (
+                                  <Star 
+                                    key={i} 
+                                    size={14} 
+                                    className={cn(
+                                      "transition-colors",
+                                      i < stars ? "fill-amber-400 text-amber-400" : "text-slate-300"
+                                    )} 
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <h3 className="text-2xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors leading-tight">
+                            {lesson.title}
+                          </h3>
+                          {lesson.subtitle && (
+                            <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-2">
+                              {lesson.subtitle}
+                            </p>
+                          )}
+                          <p className="text-slate-600 font-medium text-sm">
+                            {lesson.vocabulary.length} words to master
+                          </p>
+                        </div>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -658,7 +716,7 @@ export default function App() {
           <TeacherDashboard onBack={() => setView('landing')} />
         )}
 
-        {view === 'lesson-detail' && selectedLesson && (
+        {view === 'lesson-detail' && selectedLessonId && (
           <motion.div 
             key="detail"
             initial={{ opacity: 0, x: 20 }}
@@ -684,10 +742,10 @@ export default function App() {
             </div>
 
             <div className="mb-12">
-              <h2 className="text-5xl font-black text-slate-900 mb-1 tracking-tighter">{selectedLesson.title}</h2>
-              {selectedLesson.subtitle && (
+              <h2 className="text-5xl font-black text-slate-900 mb-1 tracking-tighter">{selectedLessonId.title}</h2>
+              {selectedLessonId.subtitle && (
                 <p className="text-indigo-600 font-black text-sm uppercase tracking-[0.2em] mb-4">
-                  {selectedLesson.subtitle}
+                  {selectedLessonId.subtitle}
                 </p>
               )}
               <div className="flex gap-1.5">
@@ -695,7 +753,7 @@ export default function App() {
                   <Star 
                     key={i} 
                     size={28} 
-                    className={i < getStarsCount(selectedLesson.id) ? "fill-amber-400 text-amber-400" : "text-slate-300"} 
+                    className={i < getStarsCount(selectedLessonId.id) ? "fill-amber-400 text-amber-400" : "text-slate-300"} 
                   />
                 ))}
               </div>
@@ -706,7 +764,7 @@ export default function App() {
                 title="Flashcards" 
                 desc="Practice vocabulary with flips" 
                 icon={<BookOpen className="text-rose-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.flashcards : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.stars?.flashcards : false}
                 onClick={() => handleActivitySelect('flashcards')}
                 color="bg-rose-50"
               />
@@ -714,37 +772,37 @@ export default function App() {
                 title="Phrase Unscramble" 
                 desc="Unscramble phrases from the lesson" 
                 icon={<Target className="text-sky-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.phraseUnscramble : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.stars?.phraseUnscramble : false}
                 onClick={() => handleActivitySelect('phraseUnscramble')}
                 color="bg-sky-50"
-                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.phraseUnscramble?.level : undefined}
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLessonId.id]?.phraseUnscramble?.level : undefined}
               />
               <ActivityCard 
                 title="Hangman" 
                 desc="Guess the word before it's too late" 
                 icon={<Gamepad2 className="text-emerald-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.hangman : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.stars?.hangman : false}
                 onClick={() => handleActivitySelect('hangman')}
                 color="bg-emerald-50"
-                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.hangman?.level : undefined}
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLessonId.id]?.hangman?.level : undefined}
               />
               <ActivityCard 
                 title="Word Scramble" 
                 desc="Unscramble letters to form words" 
                 icon={<Keyboard className="text-indigo-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.scramble : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.stars?.scramble : false}
                 onClick={() => handleActivitySelect('scramble')}
                 color="bg-indigo-50"
-                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.scramble?.level : undefined}
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLessonId.id]?.scramble?.level : undefined}
               />
               <ActivityCard 
                 title="Piano Fail" 
                 desc="Musical phrase reconstruction" 
                 icon={<Music className="text-violet-500" />}
-                completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.stars?.piano : false}
+                completed={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.stars?.piano : false}
                 onClick={() => handleActivitySelect('piano')}
                 color="bg-violet-50"
-                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLesson.id]?.piano?.level : undefined}
+                progress={currentUser ? studentActivity[currentUser]?.gameProgress?.[selectedLessonId.id]?.piano?.level : undefined}
               />
               <ActivityCard 
                 title="Verb Session" 
@@ -765,7 +823,7 @@ export default function App() {
                   title="Extra Assignment" 
                   desc="Test your knowledge with 10 questions" 
                   icon={<ClipboardList className="text-emerald-600" />}
-                  completed={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.assignmentCompleted : false}
+                  completed={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.assignmentCompleted : false}
                   onClick={() => setView('assignment')}
                   color="bg-emerald-50"
                 />
@@ -774,13 +832,13 @@ export default function App() {
           </motion.div>
         )}
 
-        {view === 'assignment' && selectedLesson && (
+        {view === 'assignment' && selectedLessonId && (
           <Assignment 
-            questions={selectedLesson.assignments || []}
-            onComplete={(answers, grade) => completeAssignment(selectedLesson.id, answers, grade)}
+            questions={selectedLessonId.assignments || []}
+            onComplete={(answers, grade) => completeAssignment(selectedLessonId.id, answers, grade)}
             onClose={() => setView('lesson-detail')}
-            existingAnswers={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.assignmentAnswers : undefined}
-            existingGrade={currentUser ? userProgress[currentUser]?.[selectedLesson.id]?.assignmentGrade : undefined}
+            existingAnswers={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.assignmentAnswers : undefined}
+            existingGrade={currentUser ? userProgress[currentUser]?.[selectedLessonId.id]?.assignmentGrade : undefined}
           />
         )}
 
@@ -804,9 +862,9 @@ export default function App() {
           <GeneralCards onBack={() => setView('home')} />
         )}
 
-        {view === 'verbs' && selectedLesson && (
+        {view === 'verbs' && selectedLessonId && (
           <LessonVerbs 
-            lesson={selectedLesson} 
+            lesson={selectedLessonId} 
             onComplete={() => setView('lesson-detail')}
             onBack={() => setView('lesson-detail')}
           />
@@ -816,8 +874,8 @@ export default function App() {
           <Conversation onBack={() => setView('home')} />
         )}
 
-        {view === 'word-search' && selectedLesson && (
-          <WordSearch lesson={selectedLesson} onClose={() => setView('lesson-detail')} />
+        {view === 'word-search' && selectedLessonId && (
+          <WordSearch lesson={selectedLessonId} onClose={() => setView('lesson-detail')} />
         )}
       </AnimatePresence>
     </div>

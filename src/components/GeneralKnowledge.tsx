@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Brain, Search, Plus, Trash2, Edit2, MessageSquare, HelpCircle, X, Save, Zap } from 'lucide-react';
+import { ChevronLeft, Brain, Search, Plus, Trash2, Edit2, MessageSquare, HelpCircle, X, Save, Zap, Volume2 } from 'lucide-react';
 import { LESSONS } from '../data/lessons';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
+import { speak } from '../lib/tts';
 
 interface GeneralKnowledgeProps {
   onBack: () => void;
@@ -40,17 +41,26 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
   const currentUserStats = (currentUser && userStats[currentUser]) || {};
   const favorites = (currentUser && favoriteCards[currentUser]) || [];
 
-  const unlockedVocabulary = customLessons
-    .filter(lesson => isLessonUnlocked(lesson.id))
-    .flatMap(lesson => {
-      const vocab = lesson.vocabulary.map(v => ({ ...v, lessonId: lesson.id }));
-      const verbs = (lesson.verbs || []).map(v => ({ ...v, lessonId: lesson.id, isVerb: true }));
-      return [...vocab, ...verbs];
-    })
-    .filter(item => {
-      const stats = currentUserStats[item.word];
-      return stats && (stats.viewCount > 0 || stats.difficulty > 0);
-    });
+  const unlockedVocabulary = Array.from(
+    customLessons
+      .filter(lesson => isLessonUnlocked(lesson.id))
+      .flatMap(lesson => {
+        const vocab = lesson.vocabulary.map(v => ({ ...v, lessonId: lesson.id }));
+        const verbs = (lesson.verbs || []).map(v => ({ ...v, lessonId: lesson.id, isVerb: true }));
+        return [...vocab, ...verbs];
+      })
+      .reduce((map, item) => {
+        // Keep the one with highest lesson id or just first encountered
+        if (!map.has(item.word)) {
+          map.set(item.word, item);
+        }
+        return map;
+      }, new Map<string, any>())
+      .values()
+  ).filter(item => {
+    const stats = currentUserStats[item.word];
+    return stats && (stats.viewCount > 0 || stats.difficulty > 0);
+  });
 
   const filteredVocab = unlockedVocabulary
     .filter(v => {
@@ -81,6 +91,7 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
   const handleWordSelect = (item: any) => {
     setSelectedWord(item);
     incrementViewCount(item.word);
+    speak(item.word);
     if (currentUser && currentUser !== 'teacher') {
       const wordIndex = item.lessonId ? customLessons.find(l => l.id === item.lessonId)?.vocabulary.findIndex(v => v.word === item.word) : 0;
       updateStudentActivity(currentUser, { 
@@ -281,6 +292,13 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
                     <span className="px-3 py-1 bg-indigo-100 text-[10px] font-black text-indigo-700 rounded-lg uppercase tracking-wider">
                       Lesson {selectedWord.lessonId}
                     </span>
+                    <button 
+                      onClick={() => speak(selectedWord.word)}
+                      className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                      title="Speak"
+                    >
+                      <Volume2 size={14} />
+                    </button>
                   </div>
                   <h3 className="text-4xl font-black text-slate-900 tracking-tighter">{selectedWord.word}</h3>
                   <p className="text-xl text-slate-600 font-medium mb-4">{selectedWord.translation}</p>

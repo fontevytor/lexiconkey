@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Check, X, Star, Trash2, Eye, Edit3, MessageSquare, HelpCircle } from 'lucide-react';
+import { ChevronLeft, Check, X, Star, Trash2, Eye, Edit3, MessageSquare, HelpCircle, Volume2 } from 'lucide-react';
 import { Vocabulary } from '../data/lessons';
 import { useAppStore } from '../store/useAppStore';
 import { cn } from '../lib/utils';
+import { speak } from '../lib/tts';
 
 interface GeneralCardsProps {
   onBack: () => void;
@@ -63,7 +64,15 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
     }
   }, [currentUser, favoriteCards, customLessons, filterType]);
 
-  const handleFlip = () => setIsFlipped(!isFlipped);
+  const currentCard = pool[currentIndex];
+
+  const handleFlip = () => {
+    const nextFlipped = !isFlipped;
+    setIsFlipped(nextFlipped);
+    if (!nextFlipped && currentCard) {
+      speak(currentCard.word);
+    }
+  };
 
   const handleNext = () => {
     setIsFlipped(false);
@@ -153,7 +162,12 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
     );
   }
 
-  const currentCard = pool[currentIndex];
+  useEffect(() => {
+    if (view === 'cards' && currentCard && !isFlipped) {
+      speak(currentCard.word);
+    }
+  }, [view, currentCard, isFlipped]);
+
   const stats = currentUser ? userStats[currentUser]?.[currentCard.word] : null;
   const notes = currentUser ? userNotes[currentUser]?.[currentCard.word] || [] : [];
   const difficulty = stats?.difficulty || 0;
@@ -203,6 +217,14 @@ export default function GeneralCards({ onBack }: GeneralCardsProps) {
                       <span className="text-xs font-black text-slate-600">{DIFFICULTY_TEXT[difficulty as keyof typeof DIFFICULTY_TEXT]}</span>
                     </div>
                   </div>
+
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); speak(currentCard.word); }}
+                    className="absolute top-8 right-24 p-3 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-100 transition-all"
+                    title="Speak"
+                  >
+                    <Volume2 size={24} />
+                  </button>
 
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleRemove(currentCard.word); }}

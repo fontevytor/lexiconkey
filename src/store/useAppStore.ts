@@ -129,6 +129,12 @@ interface WordOfTheDay {
   completedAt?: number;
 }
 
+interface Book {
+  id: number;
+  title: string;
+  description: string;
+}
+
 interface AppState {
   userType: 'student' | 'teacher' | null;
   currentUser: string | null; // username or 'teacher'
@@ -139,6 +145,7 @@ interface AppState {
   favoriteCards: Record<string, string[]>; // Key: username, Value: list of words
   memoryMasterScore: Record<string, number>; // Key: username
   wordOfTheDay: Record<string, WordOfTheDay>; // Key: username
+  books: Book[];
   customLessons: LessonData[];
   lastSaved: number;
   initialized: boolean;
@@ -158,8 +165,11 @@ interface AppState {
   incrementViewCount: (word: string) => Promise<void>;
   updateConversationStats: (xpGain: number, timeGain: number, score?: number) => Promise<void>;
   recordActivity: () => Promise<void>;
+  updateBook: (bookId: number, updates: Partial<Book>) => Promise<void>;
   updateLesson: (lessonId: number, updates: Partial<LessonData>) => Promise<void>;
   addLesson: (lesson: LessonData) => Promise<void>;
+  deleteLesson: (lessonId: number) => Promise<void>;
+  clearAllLessons: () => Promise<void>;
   reorderLessons: (newLessons: LessonData[]) => Promise<void>;
   toggleFavoriteCard: (word: string) => void;
   submitWordOfTheDay: (answer: string) => boolean;
@@ -187,7 +197,12 @@ export const useAppStore = create<AppState>()(
       favoriteCards: {},
       memoryMasterScore: {},
       wordOfTheDay: {},
-      customLessons: LESSONS,
+      books: Array.from({ length: 6 }, (_, i) => ({
+        id: i + 1,
+        title: `Book ${i + 1}`,
+        description: `Description for Book ${i + 1}`
+      })),
+      customLessons: LESSONS.map(l => ({ ...l, bookId: l.bookId || 1 })),
       lastSaved: Date.now(),
       initialized: false,
       setUserType: (userType) => set({ userType }),
@@ -211,20 +226,24 @@ export const useAppStore = create<AppState>()(
         });
         unsubscribers.push(authUnsub);
 
-        // Sync Lessons (Publicly readable per rules)
-        unsubscribers.push(onSnapshot(collection(db, 'lessons'), (snapshot) => {
+        // Sync Books
+        unsubscribers.push(onSnapshot(collection(db, 'books'), (snapshot) => {
           if (snapshot.empty) {
-            // Only initialize if we are the teacher
             if (auth.currentUser?.email === 'fontevytor@gmail.com') {
-              LESSONS.forEach(l => setDoc(doc(db, 'lessons', l.id.toString()), l).catch(err => {
-                handleFirestoreError(err, OperationType.WRITE, `lessons/${l.id}`);
-              }));
+              get().books.forEach(b => setDoc(doc(db, 'books', b.id.toString()), b));
             }
           } else {
-            const lessons: LessonData[] = [];
-            snapshot.forEach(doc => lessons.push(doc.data() as LessonData));
-            set({ customLessons: lessons.sort((a, b) => a.id - b.id) });
+            const books: Book[] = [];
+            snapshot.forEach(doc => books.push(doc.data() as Book));
+            set({ books: books.sort((a, b) => a.id - b.id) });
           }
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'books')));
+
+        // Sync Lessons (Publicly readable per rules)
+        unsubscribers.push(onSnapshot(collection(db, 'lessons'), (snapshot) => {
+          const lessons: LessonData[] = [];
+          snapshot.forEach(doc => lessons.push(doc.data() as LessonData));
+          set({ customLessons: lessons.sort((a, b) => a.id - b.id) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'lessons')));
 
         return () => unsubscribers.forEach(unsub => unsub());
@@ -430,19 +449,13 @@ export const useAppStore = create<AppState>()(
       },
 
       completeActivity: async (lessonId, activity) => {
-        const { currentUser } = get();
+        const { currentUser, customLessons } = get();
         if (!currentUser) return;
 
-        const currentProgressMap = get().userProgress[currentUser] || {
-          1: {
-            stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
-            unlocked: true,
-          }
-        };
-        
+        const currentProgressMap = get().userProgress[currentUser] || {};
         const currentProgress = currentProgressMap[lessonId] || {
           stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
-          unlocked: lessonId === 1,
+          unlocked: false,
         };
 
         const newStars = { ...currentProgress.stars, [activity]: true };
@@ -453,14 +466,29 @@ export const useAppStore = create<AppState>()(
         // Check if next lesson should be unlocked
         const starsCount = Object.values(newStars).filter(Boolean).length;
         if (starsCount >= 4) {
-          const nextId = lessonId + 1;
-          if (!newUserProgress[nextId]) {
-            newUserProgress[nextId] = {
-              stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
-              unlocked: true,
-            };
-          } else {
-            newUserProgress[nextId] = { ...newUserProgress[nextId], unlocked: true };
+          const lesson = customLessons.find(l => l.id === lessonId);
+          if (lesson) {
+            const bookLessons = customLessons
+              .filter(l => l.bookId === lesson.bookId)
+              .sort((a, b) => a.id - b.id);
+            const currentIndex = bookLessons.findIndex(l => l.id === lessonId);
+            const nextLesson = bookLessons[currentIndex + 1];
+            
+            if (nextLesson) {
+              const nextId = nextLesson.id;
+              if (!newUserProgress[nextId]) {
+                newUserProgress[nextId] = {
+                  stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
+                  unlocked: true,
+                };
+              } else {
+                newUserProgress[nextId] = { ...newUserProgress[nextId], unlocked: true };
+              }
+
+              if (get().userType === 'teacher') {
+                await setDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), newUserProgress[nextId]);
+              }
+            }
           }
         }
 
@@ -470,21 +498,17 @@ export const useAppStore = create<AppState>()(
 
         if (get().userType === 'teacher') {
           await setDoc(doc(db, `userProgress/${currentUser}/lessons`, lessonId.toString()), newLessonProgress);
-          if (starsCount >= 4) {
-            const nextId = lessonId + 1;
-            await setDoc(doc(db, `userProgress/${currentUser}/lessons`, nextId.toString()), newUserProgress[nextId]);
-          }
         }
       },
 
       completeAssignment: async (lessonId, answers, grade) => {
-        const { currentUser } = get();
+        const { currentUser, customLessons } = get();
         if (!currentUser) return;
 
         const currentProgressMap = get().userProgress[currentUser] || {};
         const currentProgress = currentProgressMap[lessonId] || {
           stars: { flashcards: false, phraseUnscramble: false, hangman: false, scramble: false, piano: false },
-          unlocked: lessonId === 1,
+          unlocked: false,
         };
 
         const newLessonProgress = { 
@@ -507,9 +531,20 @@ export const useAppStore = create<AppState>()(
       },
 
       isLessonUnlocked: (lessonId) => {
-        if (lessonId === 1) return true;
-        const { currentUser, userProgress } = get();
+        const { currentUser, userProgress, customLessons } = get();
         if (!currentUser || currentUser === 'teacher') return true;
+
+        const lesson = customLessons.find(l => l.id === lessonId);
+        if (!lesson) return false;
+
+        // First lesson of any book is always unlocked
+        const bookLessons = customLessons
+          .filter(l => l.bookId === lesson.bookId)
+          .sort((a, b) => a.id - b.id);
+        
+        if (bookLessons[0]?.id === lessonId) return true;
+
+        // Otherwise check if explicitly unlocked
         return userProgress[currentUser]?.[lessonId]?.unlocked || false;
       },
 
@@ -706,6 +741,17 @@ export const useAppStore = create<AppState>()(
         await get().updateStudentActivity(currentUser, updates);
       },
 
+      updateBook: async (bookId, updates) => {
+        set(state => ({
+          books: state.books.map(b => b.id === bookId ? { ...b, ...updates } : b)
+        }));
+        try {
+          await updateDoc(doc(db, 'books', bookId.toString()), updates);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `books/${bookId}`);
+        }
+      },
+
       updateLesson: async (lessonId, updates) => {
         // Update local state immediately for responsiveness
         set(state => ({
@@ -729,6 +775,31 @@ export const useAppStore = create<AppState>()(
           await setDoc(doc(db, 'lessons', lesson.id.toString()), lesson);
         } catch (err) {
           handleFirestoreError(err, OperationType.CREATE, `lessons/${lesson.id}`);
+        }
+      },
+
+      deleteLesson: async (lessonId) => {
+        set(state => ({
+          customLessons: state.customLessons.filter(l => l.id !== lessonId)
+        }));
+        try {
+          await deleteDoc(doc(db, 'lessons', lessonId.toString()));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, `lessons/${lessonId}`);
+        }
+      },
+
+      clearAllLessons: async () => {
+        const { customLessons } = get();
+        const promises = customLessons.map(lesson => 
+          deleteDoc(doc(db, 'lessons', lesson.id.toString()))
+        );
+        try {
+          await Promise.all(promises);
+          await deleteDoc(doc(db, 'metadata', 'lessonOrder'));
+          set({ customLessons: [] });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, 'lessons/all');
         }
       },
 
