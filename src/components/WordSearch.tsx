@@ -126,6 +126,14 @@ export default function WordSearch({ lesson, onClose }: WordSearchProps) {
     setSelection([{ row, col }]);
   };
 
+  const handleTouchStart = (e: React.TouchEvent, row: number, col: number) => {
+    if (grid[row][col].isFound) return;
+    // Prevent scrolling while playing
+    if (e.cancelable) e.preventDefault();
+    setIsDragging(true);
+    setSelection([{ row, col }]);
+  };
+
   const handleMouseEnter = (row: number, col: number) => {
     if (!isDragging || grid[row][col].isFound) return;
     
@@ -154,6 +162,20 @@ export default function WordSearch({ lesson, onClose }: WordSearchProps) {
     }
     
     setSelection(newSelection);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    
+    const touch = e.touches[0];
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (element) {
+      const row = element.getAttribute('data-row');
+      const col = element.getAttribute('data-col');
+      if (row !== null && col !== null) {
+        handleMouseEnter(parseInt(row), parseInt(col));
+      }
+    }
   };
 
   const handleMouseUp = () => {
@@ -187,27 +209,33 @@ export default function WordSearch({ lesson, onClose }: WordSearchProps) {
   const allFound = wordsToFind.length > 0 && wordsToFind.every(w => w.found);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+    <div 
+      className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4" 
+      onMouseUp={handleMouseUp} 
+      onMouseLeave={handleMouseUp}
+      onTouchEnd={handleMouseUp}
+    >
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row"
+        className="bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row max-h-[95vh] sm:max-h-[90vh]"
       >
         {/* Left Side: Grid */}
-        <div className="p-8 bg-slate-50 flex-1">
-          <div className="flex justify-between items-center mb-6">
+        <div className="p-4 sm:p-8 bg-slate-50 flex-1 overflow-y-auto">
+          <div className="flex justify-between items-center mb-4 sm:mb-6">
             <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-700 shadow-sm border border-slate-200">
-              <ChevronLeft size={24} />
+              <ChevronLeft size={20} className="sm:w-6 sm:h-6" />
             </button>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Word Search</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Word Search</h2>
             <button onClick={generateGrid} className="p-2 hover:bg-white rounded-full transition-colors text-slate-700 shadow-sm border border-slate-200">
-              <RefreshCw size={20} />
+              <RefreshCw size={18} className="sm:w-5 sm:h-5" />
             </button>
           </div>
 
           <div 
-            className="grid gap-1 bg-slate-200 p-1 rounded-2xl shadow-inner mx-auto w-fit touch-none"
+            className="grid gap-0.5 sm:gap-1 bg-slate-200 p-0.5 sm:p-1 rounded-xl sm:rounded-2xl shadow-inner mx-auto w-fit touch-none select-none"
             style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` }}
+            onTouchMove={handleTouchMove}
           >
             {grid.map((row, r) => (
               row.map((cell, c) => {
@@ -215,16 +243,19 @@ export default function WordSearch({ lesson, onClose }: WordSearchProps) {
                 return (
                   <div
                     key={`${r}-${c}`}
+                    data-row={r}
+                    data-col={c}
                     onMouseDown={() => handleMouseDown(r, c)}
                     onMouseEnter={() => handleMouseEnter(r, c)}
+                    onTouchStart={(e) => handleTouchStart(e, r, c)}
                     className={cn(
-                      "w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-sm sm:text-base font-black rounded-lg transition-all cursor-pointer select-none",
+                      "w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-xs sm:text-base font-black rounded-md sm:rounded-lg transition-all cursor-pointer select-none touch-none",
                       cell.isFound 
                         ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" 
                         : isSelected 
                           ? "bg-indigo-600 text-white" 
                           : cell.isHint
-                            ? "bg-amber-100 text-amber-600 animate-pulse border-2 border-amber-400"
+                            ? "bg-amber-100 text-amber-600 animate-pulse border border-amber-400"
                             : "bg-white text-slate-700 hover:bg-slate-100"
                     )}
                   >
@@ -237,19 +268,19 @@ export default function WordSearch({ lesson, onClose }: WordSearchProps) {
         </div>
 
         {/* Right Side: Word List */}
-        <div className="p-8 bg-white border-l border-slate-100 w-full md:w-72">
-          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Words to Find</h3>
-          <div className="space-y-3">
+        <div className="p-4 sm:p-8 bg-white border-t sm:border-t-0 sm:border-l border-slate-100 w-full md:w-72 overflow-y-auto">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 sm:mb-6">Words to Find</h3>
+          <div className="grid grid-cols-2 md:grid-cols-1 gap-2 sm:gap-3">
             {wordsToFind.map((w, i) => (
               <div 
                 key={i}
                 className={cn(
-                  "flex items-center justify-between p-3 rounded-xl font-bold transition-all",
+                  "flex items-center justify-between p-2 sm:p-3 rounded-lg sm:rounded-xl font-bold transition-all text-xs sm:text-base",
                   w.found ? "bg-emerald-50 text-emerald-600 line-through" : "bg-slate-50 text-slate-700"
                 )}
               >
                 <span>{w.word}</span>
-                {w.found && <CheckCircle2 size={16} />}
+                {w.found && <CheckCircle2 size={14} className="sm:w-4 sm:h-4" />}
               </div>
             ))}
           </div>
@@ -258,13 +289,13 @@ export default function WordSearch({ lesson, onClose }: WordSearchProps) {
             <motion.div 
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              className="mt-8 p-6 bg-indigo-600 text-white rounded-3xl text-center shadow-xl shadow-indigo-500/20"
+              className="mt-6 sm:mt-8 p-4 sm:p-6 bg-indigo-600 text-white rounded-2xl sm:rounded-3xl text-center shadow-xl shadow-indigo-500/20"
             >
-              <h4 className="text-xl font-black mb-1">Well Done!</h4>
-              <p className="text-sm font-medium opacity-80">You found all the words.</p>
+              <h4 className="text-lg sm:text-xl font-black mb-1">Well Done!</h4>
+              <p className="text-xs sm:text-sm font-medium opacity-80">You found all the words.</p>
               <button 
                 onClick={onClose}
-                className="mt-4 w-full py-2 bg-white text-indigo-600 rounded-xl font-black text-sm"
+                className="mt-4 w-full py-2 bg-white text-indigo-600 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm"
               >
                 Close Game
               </button>

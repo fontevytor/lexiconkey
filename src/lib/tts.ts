@@ -2,10 +2,13 @@ let voices: SpeechSynthesisVoice[] = [];
 
 // Pre-fill voices and listen for changes
 if (typeof window !== 'undefined' && window.speechSynthesis) {
-  voices = window.speechSynthesis.getVoices();
-  window.speechSynthesis.onvoiceschanged = () => {
+  const getVoices = () => {
     voices = window.speechSynthesis.getVoices();
   };
+  getVoices();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = getVoices;
+  }
 }
 
 export const speak = (text: string) => {
@@ -21,14 +24,18 @@ export const speak = (text: string) => {
 
   const utterance = new SpeechSynthesisUtterance(processedText);
   
+  // Re-fetch voices if empty (common on mobile browsers)
   if (voices.length === 0) {
     voices = window.speechSynthesis.getVoices();
   }
 
+  // Force language to British English
+  utterance.lang = 'en-GB';
+
   // Try to find a British English male voice
   // Common British Male voices: "Daniel", "Oliver", "Harry", "Thomas", "Google UK English Male", "David", "James"
   const britishMaleVoice = voices.find(v => 
-    (v.lang === 'en-GB' || v.lang === 'en_GB') && 
+    (v.lang.startsWith('en-GB') || v.lang.startsWith('en_GB')) && 
     (
       v.name.toLowerCase().includes('male') || 
       v.name.toLowerCase().includes('david') || 
@@ -40,7 +47,7 @@ export const speak = (text: string) => {
       v.name.toLowerCase().includes('guy') ||
       v.name.toLowerCase().includes('brian')
     )
-  ) || voices.find(v => v.lang === 'en-GB' || v.lang === 'en_GB');
+  ) || voices.find(v => v.lang.startsWith('en-GB') || v.lang.startsWith('en_GB'));
 
   if (britishMaleVoice) {
     utterance.voice = britishMaleVoice;
@@ -50,10 +57,10 @@ export const speak = (text: string) => {
     if (maleVoice) utterance.voice = maleVoice;
   }
 
-  utterance.lang = 'en-GB';
   utterance.rate = 0.85; // Slightly slower for better pronunciation
   utterance.pitch = 0.9; // Slightly lower pitch to sound more masculine if a female voice is used as fallback
 
   window.speechSynthesis.speak(utterance);
 };
+
 
