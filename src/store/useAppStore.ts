@@ -182,8 +182,8 @@ interface AppState {
   loginAsStudent: (username: string) => Promise<void>;
   exportProgressKey: () => string;
   importProgressKey: (key: string) => boolean;
-  voicePreference: 'male' | 'female' | 'random';
-  setVoicePreference: (pref: 'male' | 'female' | 'random') => void;
+  voicePreference: 'male1' | 'male2' | 'female1' | 'female2' | 'random';
+  setVoicePreference: (pref: 'male1' | 'male2' | 'female1' | 'female2' | 'random') => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -218,11 +218,13 @@ export const useAppStore = create<AppState>()(
         const unsubscribers: (() => void)[] = [];
 
         // Test connection
-        getDocFromServer(doc(db, 'test', 'connection')).catch(err => {
-          if (err.message.includes('the client is offline')) {
-            console.error("Firebase is offline. Check configuration.");
-          }
-        });
+        if (db) {
+          getDocFromServer(doc(db, 'test', 'connection')).catch(err => {
+            if (err?.message?.includes('the client is offline')) {
+              console.error("Firebase is offline. Check configuration.");
+            }
+          });
+        }
 
         // Listen for auth state changes
         const authUnsub = onAuthStateChanged(auth, (user) => {

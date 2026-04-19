@@ -203,9 +203,11 @@ export default function GeneralKnowledge({ onBack }: GeneralKnowledgeProps) {
               onChange={(e) => setVoicePreference(e.target.value as any)}
               className="bg-transparent text-sm font-black text-slate-700 focus:outline-none cursor-pointer"
             >
-              <option value="random">Random GB</option>
-              <option value="male">Male GB</option>
-              <option value="female">Female GB</option>
+              <option value="random">Random Voice</option>
+              <option value="male1">Arthur (Male Deep)</option>
+              <option value="male2">Daniel (Male Std)</option>
+              <option value="female1">Martha (Female Soft)</option>
+              <option value="female2">Hazel (Female Exp)</option>
             </select>
           </div>
           <div className="relative">
