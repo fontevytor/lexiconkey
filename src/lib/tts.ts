@@ -18,13 +18,14 @@ if (typeof window !== 'undefined' && window.speechSynthesis) {
   if (window.speechSynthesis.onvoiceschanged !== undefined) {
     window.speechSynthesis.onvoiceschanged = refreshVoices;
   }
-  // Fallback: poll a few times for mobile browsers that don't fire the event early enough
+  
+  // Polling for mobile - critical for iOS/Android
   let retries = 0;
   const pollVoices = setInterval(() => {
     refreshVoices();
     retries++;
-    if (voicesLoaded || retries > 10) clearInterval(pollVoices);
-  }, 500);
+    if (voicesLoaded || retries > 20) clearInterval(pollVoices);
+  }, 250);
 }
 
 export type VoiceGender = 'male' | 'female' | 'random';
@@ -32,7 +33,7 @@ export type VoiceGender = 'male' | 'female' | 'random';
 export const speak = (text: string, gender: VoiceGender = 'random') => {
   if (!window.speechSynthesis) return;
 
-  // Force voice refresh in case it's still empty (common on mobile)
+  // Final check for voices just before speaking
   if (voices.length === 0) {
     voices = window.speechSynthesis.getVoices();
   }
@@ -54,51 +55,78 @@ export const speak = (text: string, gender: VoiceGender = 'random') => {
     targetGender = Math.random() > 0.5 ? 'male' : 'female';
   }
 
-  const findBritishVoice = (preferredGender: 'male' | 'female') => {
+  // Exhaustive lists for British Voices
+  const UK_MALE_NAMES = [
+    'daniel', 'arthur', 'oliver', 'harry', 'david', 'james', 'thomas', 
+    'guy', 'brian', 'george', 'male', 'uk male', 'google uk english male',
+    'en-gb-x-fis-local', 'en-gb-x-rjs-local', 'en-gb-x-gbk-local', 'uk-male'
+  ];
+  
+  const UK_FEMALE_NAMES = [
+    'martha', 'hazel', 'serena', 'alice', 'victoria', 'elizabeth', 'sonia', 
+    'kate', 'fiona', 'female', 'uk female', 'google uk english female',
+    'en-gb-x-gba-local', 'en-gb-x-gbb-local', 'en-gb-x-gbd-local', 'uk-female'
+  ];
+
+  const findVoice = (preferredGender: 'male' | 'female', preferredLang: string) => {
     return voices.find(v => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase().replace('_', '-');
-      // Look for en-GB, en_GB or even just en-gb-x- (Android format)
-      const isUK = lang === 'en-gb' || lang === 'en_gb' || lang.startsWith('en-gb-');
+      const isCorrectLang = lang.startsWith(preferredLang.toLowerCase());
       
-      const isMaleNames = ['arthur', 'daniel', 'david', 'james', 'oliver', 'harry', 'thomas', 'guy', 'brian', 'uk-male', 'george', 'male'].some(n => name.includes(n));
-      const isFemaleNames = ['martha', 'hazel', 'alice', 'victoria', 'elizabeth', 'sonia', 'uk-female', 'female', 'serena', 'kate', 'hazel'].some(n => name.includes(n));
+      if (!isCorrectLang) return false;
 
-      if (preferredGender === 'male') return isUK && isMaleNames;
-      return isUK && isFemaleNames;
+      const maleMatch = UK_MALE_NAMES.some(n => name.includes(n));
+      const femaleMatch = UK_FEMALE_NAMES.some(n => name.includes(n));
+
+      if (preferredGender === 'male') return maleMatch;
+      return femaleMatch;
     });
   };
 
-  // 1. Try to find the exact preferred British voice
-  // 2. Try to find ANY British voice (even if gender is wrong)
-  // 3. Fallback to any voice of the preferred gender
-  const britishVoice = findBritishVoice(targetGender as 'male' | 'female') || 
-                      findBritishVoice(targetGender === 'male' ? 'female' : 'male') ||
-                      voices.find(v => v.lang.toLowerCase().replace('_', '-').startsWith('en-gb'));
+  // 1. Try exact British Male/Female
+  let voice = findVoice(targetGender as 'male' | 'female', 'en-gb');
 
-  if (britishVoice) {
-    utterance.voice = britishVoice;
-    // Adjust pitch to reinforce the gender feel
+  // 2. If not found, try ANY British voice (ignore gender temporarily but keep locale)
+  if (!voice) {
+    voice = voices.find(v => v.lang.toLowerCase().replace('_', '-').startsWith('en-gb'));
+  }
+
+  if (voice) {
+    utterance.voice = voice;
+    // Force pitch modification to help differentiate if the browser returned a generic voice
+    const isActuallyMale = UK_MALE_NAMES.some(n => voice!.name.toLowerCase().includes(n));
+    const isActuallyFemale = UK_FEMALE_NAMES.some(n => voice!.name.toLowerCase().includes(n));
+
     if (targetGender === 'male') {
-      utterance.pitch = 0.85;
+      utterance.pitch = isActuallyMale ? 0.85 : 0.65; // Make it extra deep if we had to use a neutral/female voice
     } else {
-      utterance.pitch = 1.15;
+      utterance.pitch = isActuallyFemale ? 1.05 : 1.25; // Make it higher if we had to use a neutral/male voice
     }
   } else {
-    // If no British voice, try ANY gender-matching voice as a fallback
-    const fallbackVoice = voices.find(v => v.name.toLowerCase().includes(targetGender));
-    if (fallbackVoice) {
-      utterance.voice = fallbackVoice;
+    // 3. Last fallback: Try ANY voice of preferred gender from ANY English locale (US, AU, etc.)
+    const anyEnglishVoice = voices.find(v => {
+      const name = v.name.toLowerCase();
+      const lang = v.lang.toLowerCase();
+      const isEnglish = lang.startsWith('en');
+      if (!isEnglish) return false;
+      
+      return targetGender === 'male' ? name.includes('male') : name.includes('female');
+    });
+
+    if (anyEnglishVoice) {
+      utterance.voice = anyEnglishVoice;
       utterance.pitch = targetGender === 'male' ? 0.75 : 1.25;
     } else {
-      // Last resort: robotic voice but pitch shifted to target gender
-      utterance.pitch = targetGender === 'male' ? 0.7 : 1.3; 
+      // 4. Absolute fallback: Just shift the pitch of the generic system voice
+      utterance.pitch = targetGender === 'male' ? 0.6 : 1.4;
     }
   }
 
-  utterance.rate = 0.82; // Balanced speed for mobile clarity
+  utterance.rate = 0.8; // Clear and steady
   window.speechSynthesis.speak(utterance);
 };
+
 
 
 
